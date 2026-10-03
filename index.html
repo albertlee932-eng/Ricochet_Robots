@@ -1,0 +1,3106 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>碰撞機器人 (Ricochet Robots) - 賽博機甲線上對戰版</title>
+    <!-- WebRTC PeerJS for Serverless P2P Online Multiplayer -->
+    <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+    <style>
+        :root {
+            --bg-deep: #050811;
+            --bg-primary: #0a0f1d;
+            --bg-secondary: #10182b;
+            --bg-tertiary: #17233d;
+            --accent-cyan: #00f2fe;
+            --accent-blue: #3b82f6;
+            --accent-crimson: #ff1e56;
+            --accent-emerald: #00ff88;
+            --accent-amber: #ffb703;
+            --accent-silver: #e2e8f0;
+            --accent-purple: #a855f7;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --border-glow: rgba(0, 242, 254, 0.35);
+            --border-color: #243556;
+            --wall-color: #ffb703;
+            --wall-glow: rgba(255, 183, 3, 0.65);
+            --board-size: min(86vmin, 660px);
+            --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang TC", "Microsoft JhengHei", sans-serif;
+            --font-mono: "SF Mono", Monaco, "Cascadia Code", Consolas, monospace;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        body {
+            background-color: var(--bg-deep);
+            background-image: 
+                radial-gradient(circle at 50% 0%, rgba(0, 242, 254, 0.08) 0%, transparent 60%),
+                radial-gradient(circle at 85% 90%, rgba(168, 85, 247, 0.06) 0%, transparent 50%),
+                linear-gradient(180deg, rgba(10, 15, 29, 0.9) 0%, rgba(5, 8, 17, 1) 100%);
+            color: var(--text-main);
+            font-family: var(--font-family);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            overflow-x: hidden;
+        }
+
+        /* Top HUD Header */
+        header {
+            width: 100%;
+            background: linear-gradient(180deg, rgba(16, 24, 43, 0.96) 0%, rgba(10, 15, 29, 0.88) 100%);
+            border-bottom: 1px solid var(--border-glow);
+            box-shadow: 0 4px 20px rgba(0, 242, 254, 0.12);
+            padding: 10px 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            backdrop-filter: blur(14px);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .header-title-box {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .header-logo {
+            width: 36px;
+            height: 36px;
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-blue));
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            box-shadow: 0 0 15px var(--accent-cyan);
+            border: 1px solid #fff;
+        }
+
+        .header-title {
+            font-size: 19px;
+            font-weight: 800;
+            letter-spacing: 1.5px;
+            background: linear-gradient(135deg, #ffffff 0%, var(--accent-cyan) 60%, var(--accent-purple) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-transform: uppercase;
+        }
+
+        .header-subtitle {
+            font-size: 11px;
+            color: var(--text-muted);
+            letter-spacing: 0.8px;
+            font-family: var(--font-mono);
+        }
+
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        /* Cyberpunk Buttons */
+        .btn {
+            background: rgba(23, 35, 61, 0.8);
+            border: 1px solid var(--border-color);
+            color: var(--text-main);
+            padding: 7px 14px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            backdrop-filter: blur(6px);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .btn::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.15), transparent);
+            transition: left 0.4s;
+        }
+
+        .btn:hover:not(:disabled)::after {
+            left: 100%;
+        }
+
+        .btn:hover:not(:disabled) {
+            background: var(--bg-tertiary);
+            border-color: var(--accent-cyan);
+            color: #fff;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 14px rgba(0, 242, 254, 0.3);
+        }
+
+        .btn:active:not(:disabled) {
+            transform: translateY(1px);
+        }
+
+        .btn:disabled {
+            opacity: 0.35;
+            cursor: not-allowed;
+            filter: grayscale(0.6);
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #00f2fe 0%, #3b82f6 100%);
+            color: #030816;
+            border: none;
+            font-weight: 700;
+            box-shadow: 0 0 12px rgba(0, 242, 254, 0.4);
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            box-shadow: 0 0 20px rgba(0, 242, 254, 0.7);
+            color: #000;
+        }
+
+        .btn-multiplayer {
+            background: linear-gradient(135deg, #a855f7 0%, #ec4899 100%);
+            color: #fff;
+            border: none;
+            font-weight: 700;
+            box-shadow: 0 0 14px rgba(168, 85, 247, 0.4);
+        }
+
+        .btn-multiplayer:hover:not(:disabled) {
+            box-shadow: 0 0 22px rgba(236, 72, 153, 0.7);
+        }
+
+        .btn-accent {
+            background: linear-gradient(135deg, var(--accent-crimson) 0%, #ff5722 100%);
+            color: white;
+            border: none;
+            font-weight: 700;
+        }
+
+        .btn-icon {
+            padding: 7px 11px;
+            font-size: 15px;
+        }
+
+        /* Target HUD & Status Bar */
+        .status-bar {
+            width: 100%;
+            max-width: 1240px;
+            padding: 12px 20px;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .target-card {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            background: rgba(16, 24, 43, 0.85);
+            border: 1px solid var(--border-glow);
+            padding: 8px 18px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4), inset 0 0 12px rgba(0, 242, 254, 0.08);
+            position: relative;
+        }
+
+        .target-badge {
+            width: 48px;
+            height: 48px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 28px;
+            position: relative;
+            background: rgba(0, 0, 0, 0.6);
+            border: 2px solid currentColor;
+            box-shadow: 0 0 18px currentColor;
+            transition: all 0.3s ease;
+        }
+
+        .target-info {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .target-label {
+            font-size: 10px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-family: var(--font-mono);
+        }
+
+        .target-name {
+            font-size: 16px;
+            font-weight: 700;
+        }
+
+        .metrics-bar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .metric-pill {
+            background: rgba(16, 24, 43, 0.85);
+            border: 1px solid var(--border-color);
+            padding: 7px 14px;
+            border-radius: 10px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-width: 86px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        }
+
+        .metric-label {
+            font-size: 10px;
+            color: var(--text-muted);
+            font-family: var(--font-mono);
+        }
+
+        .metric-val {
+            font-size: 18px;
+            font-weight: 800;
+            color: var(--accent-cyan);
+            font-variant-numeric: tabular-nums;
+            font-family: var(--font-mono);
+        }
+
+        .metric-val.highlight {
+            color: var(--accent-amber);
+            text-shadow: 0 0 8px var(--accent-amber);
+        }
+
+        .multiplayer-indicator {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(168, 85, 247, 0.15);
+            border: 1px solid rgba(168, 85, 247, 0.4);
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            color: #e9d5ff;
+        }
+
+        .pulse-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--accent-emerald);
+            box-shadow: 0 0 8px var(--accent-emerald);
+            animation: pulse-dot-anim 1.5s infinite;
+        }
+
+        @keyframes pulse-dot-anim {
+            0% { transform: scale(0.8); opacity: 0.7; }
+            50% { transform: scale(1.3); opacity: 1; }
+            100% { transform: scale(0.8); opacity: 0.7; }
+        }
+
+        /* Main Workspace: Board & Sidebar */
+        .main-container {
+            width: 100%;
+            max-width: 1240px;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            gap: 24px;
+            padding: 6px 20px 30px;
+            flex: 1;
+        }
+
+        /* Board Area with Coordinates */
+        .board-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .board-bezel {
+            width: var(--board-size);
+            height: var(--board-size);
+            background: linear-gradient(145deg, #131d33 0%, #0c1222 100%);
+            border-radius: 18px;
+            padding: 16px;
+            box-shadow: 
+                0 22px 60px rgba(0, 0, 0, 0.85),
+                0 0 25px rgba(0, 242, 254, 0.15),
+                inset 0 1px 2px rgba(255, 255, 255, 0.12);
+            border: 2px solid #233657;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* Coordinate Labels */
+        .board-coords-top, .board-coords-bottom {
+            position: absolute;
+            left: 16px;
+            right: 16px;
+            display: grid;
+            grid-template-columns: repeat(16, 1fr);
+            text-align: center;
+            font-size: 9px;
+            font-family: var(--font-mono);
+            color: rgba(0, 242, 254, 0.65);
+            pointer-events: none;
+            font-weight: 700;
+        }
+
+        .board-coords-top { top: 3px; }
+        .board-coords-bottom { bottom: 3px; }
+
+        .board-coords-left, .board-coords-right {
+            position: absolute;
+            top: 16px;
+            bottom: 16px;
+            display: grid;
+            grid-template-rows: repeat(16, 1fr);
+            align-items: center;
+            font-size: 9px;
+            font-family: var(--font-mono);
+            color: rgba(0, 242, 254, 0.65);
+            pointer-events: none;
+            font-weight: 700;
+        }
+
+        .board-coords-left { left: 4px; }
+        .board-coords-right { right: 4px; }
+
+        /* Board Wrapper & Grid */
+        .board-wrapper {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: inset 0 0 30px rgba(0, 0, 0, 0.9);
+            border: 2px solid #1a2a47;
+            background: #090e1c;
+        }
+
+        .board-grid {
+            width: 100%;
+            height: 100%;
+            display: grid;
+            grid-template-columns: repeat(16, 1fr);
+            grid-template-rows: repeat(16, 1fr);
+            position: relative;
+        }
+
+        /* Cells */
+        .cell {
+            position: relative;
+            box-sizing: border-box;
+            border: 1px solid rgba(255, 255, 255, 0.035);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .cell.even-quad {
+            background-color: rgba(0, 242, 254, 0.012);
+        }
+
+        /* High-Tech Central Reactor 2x2 Zone */
+        .cell.center-cell {
+            background: #070b16;
+            cursor: not-allowed;
+        }
+
+        .center-reactor {
+            position: absolute;
+            width: 200%;
+            height: 200%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            pointer-events: none;
+            z-index: 5;
+        }
+
+        .reactor-core-svg {
+            width: 90%;
+            height: 90%;
+            animation: rotate-reactor 16s linear infinite;
+        }
+
+        @keyframes rotate-reactor {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        /* Laser Walls */
+        .wall-n { border-top: 4.5px solid var(--wall-color) !important; box-shadow: 0 -1px 8px var(--wall-glow); }
+        .wall-e { border-right: 4.5px solid var(--wall-color) !important; box-shadow: 1px 0 8px var(--wall-glow); }
+        .wall-s { border-bottom: 4.5px solid var(--wall-color) !important; box-shadow: 0 1px 8px var(--wall-glow); }
+        .wall-w { border-left: 4.5px solid var(--wall-color) !important; box-shadow: -1px 0 8px var(--wall-glow); }
+
+        /* Target Markers on Floor */
+        .target-marker {
+            width: 74%;
+            height: 74%;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: calc(var(--board-size) / 28);
+            position: relative;
+            background: rgba(0, 0, 0, 0.6);
+            box-shadow: inset 0 0 8px rgba(0,0,0,0.85);
+            pointer-events: none;
+            z-index: 2;
+        }
+
+        .target-marker.active-target {
+            animation: pulse-beacon 1.2s infinite alternate ease-in-out;
+            box-shadow: 0 0 18px currentColor, inset 0 0 8px currentColor;
+        }
+
+        @keyframes pulse-beacon {
+            0% { transform: scale(0.86); opacity: 0.7; }
+            100% { transform: scale(1.22); opacity: 1; filter: drop-shadow(0 0 10px currentColor); }
+        }
+
+        /* Ghost Landing Previews */
+        .ghost-dest {
+            position: absolute;
+            width: 46%;
+            height: 46%;
+            border-radius: 50%;
+            background: rgba(0, 242, 254, 0.45);
+            border: 2px solid var(--accent-cyan);
+            box-shadow: 0 0 14px var(--accent-cyan);
+            z-index: 25;
+            pointer-events: all;
+            cursor: pointer;
+            animation: bounce-ghost 1s infinite alternate ease-in-out;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .ghost-dest::after {
+            content: '';
+            width: 35%;
+            height: 35%;
+            background: #fff;
+            border-radius: 50%;
+        }
+
+        .ghost-dest:hover {
+            transform: scale(1.4);
+            background: rgba(0, 242, 254, 0.95);
+            box-shadow: 0 0 20px var(--accent-cyan);
+        }
+
+        @keyframes bounce-ghost {
+            0% { transform: scale(0.85); opacity: 0.65; }
+            100% { transform: scale(1.15); opacity: 1; }
+        }
+
+        /* Robots Layer */
+        #robotsLayer {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            z-index: 20;
+        }
+
+        .robot {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 6.25%; /* 100% / 16 */
+            height: 6.25%;
+            pointer-events: auto;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            will-change: transform;
+            transition: transform 0.16s cubic-bezier(0.2, 0.8, 0.2, 1);
+            cursor: pointer;
+        }
+
+        .robot.selected {
+            z-index: 30;
+        }
+
+        .robot-svg-wrapper {
+            width: 90%;
+            height: 90%;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+        }
+
+        .robot.selected .robot-svg-wrapper {
+            transform: scale(1.18);
+            filter: drop-shadow(0 0 10px currentColor);
+        }
+
+        .robot-targeting-reticle {
+            position: absolute;
+            width: 155%;
+            height: 155%;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s ease;
+        }
+
+        .robot.selected .robot-targeting-reticle {
+            opacity: 1;
+            animation: rotate-reticle 6s linear infinite;
+        }
+
+        @keyframes rotate-reticle {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        /* Floating Emotes Layer */
+        .emote-bubble {
+            position: absolute;
+            font-size: 28px;
+            animation: float-up-fade 2.4s forwards cubic-bezier(0.2, 0.8, 0.2, 1);
+            pointer-events: none;
+            z-index: 40;
+            filter: drop-shadow(0 4px 10px rgba(0,0,0,0.8));
+        }
+
+        @keyframes float-up-fade {
+            0% { transform: translate(-50%, 0) scale(0.5); opacity: 0; }
+            20% { transform: translate(-50%, -20px) scale(1.2); opacity: 1; }
+            70% { transform: translate(-50%, -60px) scale(1); opacity: 1; }
+            100% { transform: translate(-50%, -100px) scale(0.8); opacity: 0; }
+        }
+
+        /* Controls Toolbar: Robot Selector & Direction Buttons */
+        .controls-toolbar {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 16px;
+            width: 100%;
+            max-width: var(--board-size);
+            padding: 4px 0;
+        }
+
+        .robot-selector-pills {
+            display: flex;
+            gap: 8px;
+            background: rgba(16, 24, 43, 0.85);
+            padding: 6px;
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+        }
+
+        .robot-pill {
+            padding: 6px 14px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 700;
+            cursor: pointer;
+            border: 2px solid transparent;
+            background: rgba(255, 255, 255, 0.05);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.15s ease;
+        }
+
+        .robot-pill.active {
+            border-color: #fff;
+            background: rgba(255, 255, 255, 0.22);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 14px rgba(0,0,0,0.6);
+        }
+
+        .dpad-container {
+            display: grid;
+            grid-template-columns: repeat(3, 40px);
+            grid-template-rows: repeat(3, 40px);
+            gap: 4px;
+            background: rgba(16, 24, 43, 0.85);
+            padding: 6px;
+            border-radius: 14px;
+            border: 1px solid var(--border-color);
+        }
+
+        .dpad-btn {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            color: var(--text-main);
+            font-size: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.1s ease;
+        }
+
+        .dpad-btn:hover:not(:disabled) {
+            background: var(--accent-cyan);
+            color: #000;
+            border-color: var(--accent-cyan);
+            box-shadow: 0 0 10px var(--accent-cyan);
+        }
+
+        .dpad-btn:active:not(:disabled) {
+            transform: scale(0.92);
+        }
+
+        .dpad-btn.up { grid-column: 2; grid-row: 1; }
+        .dpad-btn.left { grid-column: 1; grid-row: 2; }
+        .dpad-btn.center { grid-column: 2; grid-row: 2; font-size: 10px; background: transparent; border: none; color: var(--text-muted); cursor: default; }
+        .dpad-btn.right { grid-column: 3; grid-row: 2; }
+        .dpad-btn.down { grid-column: 2; grid-row: 3; }
+
+        /* Sidebar Panels */
+        .sidebar {
+            width: 340px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .panel-card {
+            background: rgba(16, 24, 43, 0.85);
+            border: 1px solid var(--border-color);
+            border-radius: 14px;
+            padding: 16px;
+            box-shadow: 0 6px 25px rgba(0, 0, 0, 0.45);
+            backdrop-filter: blur(10px);
+        }
+
+        .panel-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 12px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            padding-bottom: 8px;
+        }
+
+        .panel-title {
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--accent-cyan);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        /* Move History List */
+        .history-list {
+            max-height: 140px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            padding-right: 4px;
+            font-size: 12px;
+            font-family: var(--font-mono);
+        }
+
+        .history-item {
+            background: var(--bg-tertiary);
+            padding: 6px 10px;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-left: 3px solid currentColor;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+
+        .history-item:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        /* Solver & Hint Box */
+        .solver-box {
+            background: rgba(0, 242, 254, 0.04);
+            border: 1px solid rgba(0, 242, 254, 0.2);
+            border-radius: 10px;
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .solution-step-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+            padding: 5px 8px;
+            border-radius: 5px;
+            background: var(--bg-tertiary);
+            border-left: 3px solid currentColor;
+            font-family: var(--font-mono);
+        }
+
+        /* Sand Timer Section */
+        .timer-box {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: rgba(255, 183, 3, 0.05);
+            border: 1px solid rgba(255, 183, 3, 0.25);
+            border-radius: 10px;
+            padding: 12px;
+        }
+
+        .timer-display {
+            font-size: 26px;
+            font-weight: 800;
+            color: var(--accent-amber);
+            font-variant-numeric: tabular-nums;
+            font-family: var(--font-mono);
+        }
+
+        .timer-display.running {
+            animation: pulse-timer 1s infinite alternate;
+        }
+
+        @keyframes pulse-timer {
+            from { opacity: 1; }
+            to { opacity: 0.6; }
+        }
+
+        /* Bidding Section */
+        .bid-list {
+            margin-top: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            max-height: 110px;
+            overflow-y: auto;
+        }
+
+        .bid-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: var(--bg-tertiary);
+            padding: 6px 10px;
+            border-radius: 6px;
+            font-size: 12px;
+        }
+
+        .bid-item.winner {
+            border: 1px solid var(--accent-amber);
+            background: rgba(255, 183, 3, 0.15);
+            font-weight: bold;
+        }
+
+        /* Chat & Emotes Panel */
+        .chat-box {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .chat-messages {
+            max-height: 90px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            font-size: 12px;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 6px;
+            border-radius: 6px;
+        }
+
+        .chat-msg {
+            word-break: break-word;
+        }
+
+        .chat-msg strong {
+            color: var(--accent-cyan);
+        }
+
+        .emote-picker {
+            display: flex;
+            gap: 6px;
+            justify-content: space-around;
+        }
+
+        .emote-btn {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 4px 8px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: transform 0.15s;
+        }
+
+        .emote-btn:hover {
+            transform: scale(1.25);
+            border-color: var(--accent-cyan);
+        }
+
+        /* Modals (Forced Hidden by Default) */
+        .modal-overlay {
+            display: none !important;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(8px);
+            align-items: center;
+            justify-content: center;
+            z-index: 200;
+        }
+
+        .modal-overlay.active {
+            display: flex !important;
+        }
+
+        .modal-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-glow);
+            border-radius: 18px;
+            width: 90%;
+            max-width: 540px;
+            max-height: 85vh;
+            overflow-y: auto;
+            padding: 24px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.9), 0 0 30px rgba(0, 242, 254, 0.2);
+            transform: scale(0.96);
+            transition: transform 0.25s ease;
+        }
+
+        .modal-overlay.active .modal-card {
+            transform: scale(1);
+        }
+
+        .modal-title {
+            font-size: 20px;
+            font-weight: 800;
+            color: var(--accent-cyan);
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .modal-body {
+            font-size: 14px;
+            line-height: 1.6;
+            color: #e2e8f0;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+
+        .rule-card {
+            background: var(--bg-tertiary);
+            padding: 12px;
+            border-radius: 10px;
+            border-left: 4px solid var(--accent-cyan);
+        }
+
+        .rule-card h4 {
+            color: #fff;
+            margin-bottom: 4px;
+            font-size: 14px;
+        }
+
+        /* Victory Banner */
+        .victory-card {
+            text-align: center;
+        }
+
+        .victory-icon {
+            font-size: 54px;
+            margin-bottom: 8px;
+            animation: bounce 0.8s infinite alternate ease-in-out;
+        }
+
+        @keyframes bounce {
+            from { transform: translateY(0); }
+            to { transform: translateY(-10px); }
+        }
+
+        /* Responsiveness */
+        @media (max-width: 940px) {
+            .main-container {
+                flex-direction: column;
+                align-items: center;
+            }
+            .sidebar {
+                width: 100%;
+                max-width: var(--board-size);
+            }
+            .header-subtitle {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Header Navigation -->
+    <header>
+        <div class="header-title-box">
+            <div class="header-logo" title="碰撞機器人">🤖</div>
+            <div>
+                <div class="header-title">碰撞機器人 · 賽博連線版</div>
+                <div class="header-subtitle">RICOCHET ROBOTS // MECH TACTICAL NETWORK</div>
+            </div>
+        </div>
+        <div class="header-actions">
+            <button class="btn btn-multiplayer" id="btnOpenMultiplayer">🌐 網路連線對戰</button>
+            <button class="btn btn-icon" id="btnSound" title="開關音效">🔊</button>
+            <button class="btn btn-icon" id="btnRules" title="遊戲規則說明">❓ 規則</button>
+            <button class="btn btn-primary" id="btnNewGame" title="隨機生成全新棋盤">🔀 全新棋盤</button>
+        </div>
+    </header>
+
+    <!-- Target & Live Status Bar -->
+    <div class="status-bar">
+        <!-- Current Target -->
+        <div class="target-card">
+            <div class="target-badge" id="targetBadge">★</div>
+            <div class="target-info">
+                <span class="target-label">當前挑戰目標 (Target)</span>
+                <span class="target-name" id="targetName">紅色星形 (Red Star)</span>
+            </div>
+        </div>
+
+        <!-- Metrics & Multiplayer Indicator -->
+        <div class="metrics-bar">
+            <div class="multiplayer-indicator" id="mpIndicator" style="display: none;">
+                <div class="pulse-dot"></div>
+                <span id="mpStatusText">房間：RC-888 (2人)</span>
+            </div>
+            <div class="metric-pill">
+                <span class="metric-label">目前步數 (Moves)</span>
+                <span class="metric-val" id="moveCountVal">0</span>
+            </div>
+            <div class="metric-pill">
+                <span class="metric-label">最佳理論步數 (Par)</span>
+                <span class="metric-val highlight" id="parCountVal">-</span>
+            </div>
+            <div class="metric-pill">
+                <span class="metric-label">已收集晶片 (Score)</span>
+                <span class="metric-val" id="scoreCountVal">0 / 17</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Workspace -->
+    <div class="main-container">
+        
+        <!-- Left: Game Board Area -->
+        <div class="board-container">
+            <div class="board-bezel">
+                <!-- Board Coordinates -->
+                <div class="board-coords-top">
+                    <span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span><span>7</span><span>8</span><span>9</span><span>10</span><span>11</span><span>12</span><span>13</span><span>14</span><span>15</span><span>16</span>
+                </div>
+                <div class="board-coords-bottom">
+                    <span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span><span>7</span><span>8</span><span>9</span><span>10</span><span>11</span><span>12</span><span>13</span><span>14</span><span>15</span><span>16</span>
+                </div>
+                <div class="board-coords-left">
+                    <span>A</span><span>B</span><span>C</span><span>D</span><span>E</span><span>F</span><span>G</span><span>H</span><span>I</span><span>J</span><span>K</span><span>L</span><span>M</span><span>N</span><span>O</span><span>P</span>
+                </div>
+                <div class="board-coords-right">
+                    <span>A</span><span>B</span><span>C</span><span>D</span><span>E</span><span>F</span><span>G</span><span>H</span><span>I</span><span>J</span><span>K</span><span>L</span><span>M</span><span>N</span><span>O</span><span>P</span>
+                </div>
+
+                <div class="board-wrapper" id="boardWrapper">
+                    <div class="board-grid" id="boardGrid">
+                        <!-- 16x16 Cells will be rendered here dynamically -->
+                    </div>
+                    <!-- Robots layer sits exactly over the grid -->
+                    <div id="robotsLayer"></div>
+                    <!-- Floating Emotes Layer -->
+                    <div id="emotesLayer" style="position: absolute; inset: 0; pointer-events: none;"></div>
+                </div>
+            </div>
+
+            <!-- Controls Toolbar: Robot Selector & Direction Buttons -->
+            <div class="controls-toolbar">
+                <div class="robot-selector-pills" id="robotPills">
+                    <!-- Dynamic robot selector buttons -->
+                </div>
+
+                <!-- On-Screen D-Pad (Touch & Mouse) -->
+                <div class="dpad-container">
+                    <button class="dpad-btn up" id="dpadUp" title="向上滑行 (↑ / W)">▲</button>
+                    <button class="dpad-btn left" id="dpadLeft" title="向左滑行 (← / A)">◀</button>
+                    <div class="dpad-btn center">滑行</div>
+                    <button class="dpad-btn right" id="dpadRight" title="向右滑行 (→ / D)">▶</button>
+                    <button class="dpad-btn down" id="dpadDown" title="向下滑行 (↓ / S)">▼</button>
+                </div>
+            </div>
+
+            <!-- Quick Action Buttons under board -->
+            <div style="display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; width: 100%; max-width: var(--board-size);">
+                <button class="btn" id="btnUndo" title="復原上一動 (Z)">⏪ 復原 (Undo)</button>
+                <button class="btn" id="btnReset" title="重設回到目標初始狀態 (R)">🔄 重設本局 (Reset)</button>
+                <button class="btn" id="btnNextTarget" title="進入下一個目標 (N)">🎯 下個目標 (Next)</button>
+                <button class="btn btn-accent" id="btnHint" title="獲取 AI 提示">💡 提示 (Hint)</button>
+            </div>
+        </div>
+
+        <!-- Right: Control & Features Sidebar -->
+        <div class="sidebar">
+
+            <!-- Sand Timer & Bidding Panel (Party / Multiplayer Mode) -->
+            <div class="panel-card">
+                <div class="panel-header">
+                    <div class="panel-title">⏳ 60秒沙漏競速 (Sand Timer)</div>
+                    <span id="timerStatus" style="font-size: 11px; color: var(--text-muted); font-family: var(--font-mono);">未啟動</span>
+                </div>
+                <div class="timer-box">
+                    <div>
+                        <div style="font-size: 10px; color: var(--text-muted); font-family: var(--font-mono);">REMAINING TIME</div>
+                        <div class="timer-display" id="timerVal">01:00</div>
+                    </div>
+                    <button class="btn btn-primary" id="btnToggleTimer">▶ 翻轉沙漏</button>
+                </div>
+                
+                <div style="margin-top: 12px; font-size: 12px;">
+                    <div style="display: flex; gap: 6px;">
+                        <input type="text" id="bidderName" placeholder="玩家暱稱" style="width: 48%; background: var(--bg-tertiary); border: 1px solid var(--border-color); color: #fff; padding: 6px 10px; border-radius: 6px; font-size: 12px;">
+                        <input type="number" id="bidMoves" placeholder="步數" min="1" max="50" style="width: 28%; background: var(--bg-tertiary); border: 1px solid var(--border-color); color: #fff; padding: 6px 10px; border-radius: 6px; font-size: 12px;">
+                        <button class="btn" id="btnAddBid" style="width: 24%; padding: 6px 8px;">競標</button>
+                    </div>
+                    <div class="bid-list" id="bidList">
+                        <!-- Dynamic bids -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- In-Game Multiplayer Chat & Quick Emotes -->
+            <div class="panel-card" id="chatPanel" style="display: none;">
+                <div class="panel-header">
+                    <div class="panel-title">💬 戰術通訊與表情</div>
+                </div>
+                <div class="chat-box">
+                    <div class="emote-picker">
+                        <button class="emote-btn" data-emote="🤖">🤖</button>
+                        <button class="emote-btn" data-emote="💡">💡</button>
+                        <button class="emote-btn" data-emote="⚡">⚡</button>
+                        <button class="emote-btn" data-emote="🔥">🔥</button>
+                        <button class="emote-btn" data-emote="😱">😱</button>
+                        <button class="emote-btn" data-emote="👑">👑</button>
+                    </div>
+                    <div class="chat-messages" id="chatMessages">
+                        <div class="chat-msg"><em>通訊頻道已連線...</em></div>
+                    </div>
+                    <div style="display: flex; gap: 6px;">
+                        <input type="text" id="chatInput" placeholder="發送通訊訊息..." style="flex: 1; background: var(--bg-tertiary); border: 1px solid var(--border-color); color: #fff; padding: 6px 10px; border-radius: 6px; font-size: 12px;">
+                        <button class="btn" id="btnSendChat" style="padding: 6px 12px;">發送</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- AI Solver & Solution Step Player -->
+            <div class="panel-card">
+                <div class="panel-header">
+                    <div class="panel-title">🧠 AI 智能求解助手</div>
+                    <button class="btn" id="btnSolve" style="padding: 4px 8px; font-size: 11px;">計算最佳解</button>
+                </div>
+                <div class="solver-box">
+                    <div id="solverStatusText" style="font-size: 12px; color: var(--text-muted);">
+                        點擊「計算最佳解」或「提示」查看 AI 規劃之最短路徑。
+                    </div>
+                    <div id="solutionStepsContainer" style="display: none; flex-direction: column; gap: 6px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <span style="font-size: 11px; font-weight: 700; color: var(--accent-cyan); font-family: var(--font-mono);">OPTIMAL ROUTE</span>
+                            <div style="display: flex; gap: 6px;">
+                                <button class="btn" id="btnAutoPlay" style="padding: 3px 8px; font-size: 11px;">▶ 自動示範</button>
+                            </div>
+                        </div>
+                        <div id="solutionStepsList" style="max-height: 140px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px;"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Move History Panel -->
+            <div class="panel-card">
+                <div class="panel-header">
+                    <div class="panel-title">📜 移動歷程 (Move History)</div>
+                    <span id="historyCount" style="font-size: 11px; color: var(--text-muted); font-family: var(--font-mono);">0 步</span>
+                </div>
+                <div class="history-list" id="historyList">
+                    <div style="color: var(--text-muted); text-align: center; padding: 16px 0; font-size: 12px;">
+                        尚未進行移動，請點選機器人開始滑行！
+                    </div>
+                </div>
+            </div>
+
+            <!-- Board Options & Settings -->
+            <div class="panel-card">
+                <div class="panel-header">
+                    <div class="panel-title">⚙️ 機甲系統設定</div>
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 10px; font-size: 13px;">
+                    <label style="display: flex; align-items: center; justify-content: space-between; cursor: pointer;">
+                        <span>啟用第 5 隻銀色機甲 (Silver Robot)</span>
+                        <input type="checkbox" id="toggleSilverRobot" style="accent-color: var(--accent-cyan); width: 16px; height: 16px;">
+                    </label>
+                    <label style="display: flex; align-items: center; justify-content: space-between; cursor: pointer;">
+                        <span>顯示滑行終點預覽 (Ghost Markers)</span>
+                        <input type="checkbox" id="toggleGhostMarkers" checked style="accent-color: var(--accent-cyan); width: 16px; height: 16px;">
+                    </label>
+                    <label style="display: flex; align-items: center; justify-content: space-between; cursor: pointer;">
+                        <span>快速滑行動畫 (Fast Animation)</span>
+                        <input type="checkbox" id="toggleFastAnim" checked style="accent-color: var(--accent-cyan); width: 16px; height: 16px;">
+                    </label>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- Multiplayer Lobby Modal -->
+    <div class="modal-overlay" id="multiplayerModal">
+        <div class="modal-card">
+            <div class="modal-title">🌐 網路連線對戰中心 (P2P Network)</div>
+            <div class="modal-body">
+                <p style="font-size: 13px; color: var(--text-muted);">
+                    透過 WebRTC 點對點連線，無需外部伺服器即可直接與好友線上連線對戰！
+                </p>
+
+                <!-- Step 1: Create or Join -->
+                <div id="mpSetupSection" style="display: flex; flex-direction: column; gap: 14px;">
+                    <div style="display: flex; gap: 10px;">
+                        <input type="text" id="mpPlayerName" placeholder="輸入您的機甲代號..." value="指揮官" style="flex: 1; background: var(--bg-tertiary); border: 1px solid var(--border-color); color: #fff; padding: 10px 14px; border-radius: 8px; font-size: 13px;">
+                    </div>
+                    
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                        <div style="background: var(--bg-tertiary); border: 1px solid var(--border-color); padding: 14px; border-radius: 10px; display: flex; flex-direction: column; gap: 8px;">
+                            <h4 style="color: var(--accent-cyan);">👑 建立房間 (Host)</h4>
+                            <p style="font-size: 12px; color: var(--text-muted);">創立新對戰室，生成房號讓好友加入。</p>
+                            <button class="btn btn-primary" id="btnCreateRoom" style="margin-top: 6px; justify-content: center;">開創新房間</button>
+                        </div>
+                        <div style="background: var(--bg-tertiary); border: 1px solid var(--border-color); padding: 14px; border-radius: 10px; display: flex; flex-direction: column; gap: 8px;">
+                            <h4 style="color: var(--accent-purple);">🚀 加入房間 (Join)</h4>
+                            <input type="text" id="inputRoomCode" placeholder="輸入 5 碼房號..." style="background: var(--bg-secondary); border: 1px solid var(--border-color); color: #fff; padding: 6px 10px; border-radius: 6px; font-size: 12px; text-transform: uppercase;">
+                            <button class="btn btn-multiplayer" id="btnJoinRoom" style="justify-content: center;">加入房間</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Step 2: Room Lobby Active -->
+                <div id="mpActiveRoomSection" style="display: none; flex-direction: column; gap: 14px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(0, 242, 254, 0.1); border: 1px solid var(--accent-cyan); padding: 12px 16px; border-radius: 10px;">
+                        <div>
+                            <div style="font-size: 11px; color: var(--text-muted); font-family: var(--font-mono);">ROOM CODE</div>
+                            <div style="font-size: 24px; font-weight: 800; color: #fff; font-family: var(--font-mono); letter-spacing: 2px;" id="displayRoomCode">-----</div>
+                        </div>
+                        <button class="btn" id="btnCopyInviteLink" style="font-size: 12px;">📋 複製邀請連結</button>
+                    </div>
+
+                    <div>
+                        <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 6px;">房間連線成員 (<span id="playerCount">1</span>)：</div>
+                        <div id="lobbyPlayerList" style="display: flex; flex-direction: column; gap: 6px; max-height: 120px; overflow-y: auto;">
+                            <!-- Dynamic player badges -->
+                        </div>
+                    </div>
+
+                    <div style="display: flex; justify-content: space-between; margin-top: 8px;">
+                        <button class="btn" id="btnLeaveRoom">離開房間</button>
+                        <button class="btn btn-primary" id="btnStartMultiplayerGame" style="display: none;">▶ 開始多人對戰</button>
+                    </div>
+                </div>
+
+                <button class="btn" id="btnCloseMultiplayer" style="align-self: center; margin-top: 6px;">返回單人模式</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Victory Modal -->
+    <div class="modal-overlay" id="victoryModal">
+        <div class="modal-card victory-card">
+            <div class="victory-icon">🏆</div>
+            <div class="modal-title" style="justify-content: center;">挑戰成功！目標達成！</div>
+            <div class="modal-body">
+                <p id="victoryMessage">恭喜你成功將機甲引導至目標！</p>
+                <div style="display: flex; justify-content: space-around; background: var(--bg-tertiary); padding: 14px; border-radius: 12px; margin: 10px 0;">
+                    <div>
+                        <div style="font-size: 11px; color: var(--text-muted); font-family: var(--font-mono);">YOUR MOVES</div>
+                        <div style="font-size: 24px; font-weight: 800; color: var(--accent-cyan); font-family: var(--font-mono);" id="victoryPlayerMoves">0</div>
+                    </div>
+                    <div>
+                        <div style="font-size: 11px; color: var(--text-muted); font-family: var(--font-mono);">OPTIMAL PAR</div>
+                        <div style="font-size: 24px; font-weight: 800; color: var(--accent-amber); font-family: var(--font-mono);" id="victoryParMoves">0</div>
+                    </div>
+                </div>
+                <div style="display: flex; gap: 10px; justify-content: center; margin-top: 10px;">
+                    <button class="btn" id="btnVictoryStay">留在本局</button>
+                    <button class="btn btn-primary" id="btnVictoryNext">🎯 挑戰下一個目標</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Rules Modal -->
+    <div class="modal-overlay" id="rulesModal">
+        <div class="modal-card">
+            <div class="modal-title">📖 碰撞機器人 (Ricochet Robots) 遊戲規則</div>
+            <div class="modal-body">
+                <div class="rule-card">
+                    <h4>🤖 機器人滑行物理機制</h4>
+                    <p>機器人一旦朝某個方向滑行，<strong>不會停下</strong>，直到撞上<strong>牆壁、外圍邊界、中央 2x2 禁區，或是另一隻機器人</strong>才會停在障礙物前一格。</p>
+                </div>
+                <div class="rule-card">
+                    <h4>🎯 達成目標條件</h4>
+                    <p>必須讓<strong>與目標同顏色</strong>的機器人（若目標為彩虹黑洞漩渦，則任何機器人皆可）<strong>精準停在目標格上</strong>。直接滑行穿過不算，必須停下才算抵達！</p>
+                </div>
+                <div class="rule-card">
+                    <h4>🔀 借力跳板 (合作撞擊)</h4>
+                    <p>你可以<strong>任意移動任何顏色的機器人</strong>！善用其他機器人當作擋板或轉折點，是解開高難度題目（例如需拐好幾個彎）的核心技巧！</p>
+                </div>
+                <div class="rule-card">
+                    <h4>⏳ 競速沙漏模式玩法</h4>
+                    <p>實體桌遊玩法：當有玩家在腦海中看出解法時，喊出預估步數（例如「8 步！」）並點擊啟動 60 秒沙漏。其他玩家可喊更少步數。時間到時，由喊出最少步數者在棋盤上進行驗證，成功即可獲得該目標標記！</p>
+                </div>
+                <div class="rule-card">
+                    <h4>🌐 網路連線對戰玩法</h4>
+                    <p>創立房間後將 5 碼房號發給好友，全員同步看到相同的棋盤與目標。一人喊步數即啟動全員 60 秒倒數，時間結束後由喊出最低步數者即時操作驗證，其他玩家可即時觀看他的每一步機甲滑行動畫！</p>
+                </div>
+                <div class="rule-card">
+                    <h4>⌨️ 操作快速鍵</h4>
+                    <p>• <strong>方向鍵 / WASD</strong>：滑行當前選取之機器人<br>
+                       • <strong>數字鍵 1-5 或 R, G, B, Y, S</strong>：快速切換機器人<br>
+                       • <strong>空白鍵 (Space) / Tab</strong>：循環切換下一隻機器人<br>
+                       • <strong>Z 鍵</strong>：復原 (Undo)<br>
+                       • <strong>R 鍵</strong>：重設本局 (Reset)<br>
+                       • <strong>點選棋盤預覽點 (Ghost Dots)</strong>：直接滑行至該點</p>
+                </div>
+                <button class="btn btn-primary" id="btnCloseRules" style="align-self: center; margin-top: 10px;">我知道了，開始挑戰！</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Audio Synthesizer, SVG Mech Graphics, & Game Scripts -->
+    <script>
+        /* ==========================================================================
+           AUDIO SYNTHESIZER (Web Audio API - Zero External Dependencies)
+           ========================================================================== */
+        class SoundFX {
+            constructor() {
+                this.ctx = null;
+                this.muted = false;
+            }
+
+            init() {
+                if (!this.ctx) {
+                    const AudioContext = window.AudioContext || window.webkitAudioContext;
+                    if (AudioContext) this.ctx = new AudioContext();
+                }
+                if (this.ctx && this.ctx.state === 'suspended') {
+                    this.ctx.resume();
+                }
+            }
+
+            playSelect() {
+                if (this.muted) return;
+                this.init();
+                if (!this.ctx) return;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(520, this.ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(1040, this.ctx.currentTime + 0.08);
+                gain.gain.setValueAtTime(0.08, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.08);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.08);
+            }
+
+            playMove() {
+                if (this.muted) return;
+                this.init();
+                if (!this.ctx) return;
+                const now = this.ctx.currentTime;
+                // Laser glide whoosh
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(360, now);
+                osc.frequency.exponentialRampToValueAtTime(110, now + 0.14);
+                gain.gain.setValueAtTime(0.12, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.14);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start(now);
+                osc.stop(now + 0.14);
+
+                // Metallic clank at impact
+                setTimeout(() => {
+                    if (!this.ctx || this.muted) return;
+                    const bumpOsc = this.ctx.createOscillator();
+                    const bumpGain = this.ctx.createGain();
+                    bumpOsc.type = 'square';
+                    bumpOsc.frequency.setValueAtTime(180, this.ctx.currentTime);
+                    bumpOsc.frequency.exponentialRampToValueAtTime(35, this.ctx.currentTime + 0.06);
+                    bumpGain.gain.setValueAtTime(0.14, this.ctx.currentTime);
+                    bumpGain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.06);
+                    bumpOsc.connect(bumpGain);
+                    bumpGain.connect(this.ctx.destination);
+                    bumpOsc.start();
+                    bumpOsc.stop(this.ctx.currentTime + 0.06);
+                }, 140);
+            }
+
+            playWin() {
+                if (this.muted) return;
+                this.init();
+                if (!this.ctx) return;
+                const notes = [523.25, 659.25, 783.99, 1046.50, 1318.51]; // C5, E5, G5, C6, E6
+                notes.forEach((freq, idx) => {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    const start = this.ctx.currentTime + idx * 0.09;
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(freq, start);
+                    gain.gain.setValueAtTime(0.15, start);
+                    gain.gain.exponentialRampToValueAtTime(0.001, start + 0.28);
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start(start);
+                    osc.stop(start + 0.28);
+                });
+            }
+
+            playTick() {
+                if (this.muted) return;
+                this.init();
+                if (!this.ctx) return;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(880, this.ctx.currentTime);
+                gain.gain.setValueAtTime(0.05, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.03);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.03);
+            }
+
+            playAlarm() {
+                if (this.muted) return;
+                this.init();
+                if (!this.ctx) return;
+                for (let i = 0; i < 3; i++) {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    const start = this.ctx.currentTime + i * 0.25;
+                    osc.type = 'sawtooth';
+                    osc.frequency.setValueAtTime(620, start);
+                    gain.gain.setValueAtTime(0.14, start);
+                    gain.gain.exponentialRampToValueAtTime(0.001, start + 0.2);
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start(start);
+                    osc.stop(start + 0.2);
+                }
+            }
+
+            playEmote() {
+                if (this.muted) return;
+                this.init();
+                if (!this.ctx) return;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(700, this.ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(1200, this.ctx.currentTime + 0.12);
+                gain.gain.setValueAtTime(0.08, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.12);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.12);
+            }
+        }
+
+        const soundFX = new SoundFX();
+
+        /* ==========================================================================
+           AUTHENTIC RICOCHET ROBOTS QUADRANTS & BOARD GENERATOR
+           ========================================================================== */
+        const QUADRANTS = {
+            sideA: [
+                {
+                    id: 'A1',
+                    targets: [
+                        { r: 1, c: 5, color: 'blue', shape: 'star', walls: ['S', 'W'] },
+                        { r: 2, c: 1, color: 'yellow', shape: 'circle', walls: ['N', 'E'] },
+                        { r: 5, c: 6, color: 'red', shape: 'triangle', walls: ['N', 'W'] },
+                        { r: 6, c: 2, color: 'green', shape: 'square', walls: ['S', 'E'] }
+                    ],
+                    edges: [
+                        { r: 0, c: 3, wall: 'E' },
+                        { r: 4, c: 0, wall: 'S' }
+                    ]
+                },
+                {
+                    id: 'A2',
+                    targets: [
+                        { r: 1, c: 3, color: 'red', shape: 'circle', walls: ['S', 'E'] },
+                        { r: 3, c: 6, color: 'blue', shape: 'square', walls: ['N', 'W'] },
+                        { r: 5, c: 1, color: 'yellow', shape: 'star', walls: ['N', 'E'] },
+                        { r: 6, c: 4, color: 'green', shape: 'triangle', walls: ['S', 'W'] }
+                    ],
+                    edges: [
+                        { r: 0, c: 5, wall: 'E' },
+                        { r: 2, c: 0, wall: 'S' }
+                    ]
+                },
+                {
+                    id: 'A3',
+                    targets: [
+                        { r: 2, c: 4, color: 'blue', shape: 'triangle', walls: ['S', 'E'] },
+                        { r: 3, c: 1, color: 'green', shape: 'star', walls: ['N', 'W'] },
+                        { r: 5, c: 5, color: 'yellow', shape: 'square', walls: ['S', 'W'] },
+                        { r: 6, c: 2, color: 'red', shape: 'star', walls: ['N', 'E'] }
+                    ],
+                    edges: [
+                        { r: 0, c: 4, wall: 'E' },
+                        { r: 6, c: 0, wall: 'S' }
+                    ]
+                },
+                {
+                    id: 'A4',
+                    targets: [
+                        { r: 1, c: 6, color: 'green', shape: 'circle', walls: ['S', 'W'] },
+                        { r: 2, c: 2, color: 'yellow', shape: 'triangle', walls: ['N', 'E'] },
+                        { r: 4, c: 5, color: 'red', shape: 'square', walls: ['S', 'E'] },
+                        { r: 6, c: 3, color: 'blue', shape: 'circle', walls: ['N', 'W'] },
+                        { r: 3, c: 4, color: 'vortex', shape: 'vortex', walls: ['N', 'E'] }
+                    ],
+                    edges: [
+                        { r: 0, c: 2, wall: 'E' },
+                        { r: 5, c: 0, wall: 'S' }
+                    ]
+                }
+            ],
+            sideB: [
+                {
+                    id: 'B1',
+                    targets: [
+                        { r: 2, c: 6, color: 'blue', shape: 'star', walls: ['N', 'E'] },
+                        { r: 5, c: 2, color: 'yellow', shape: 'circle', walls: ['S', 'W'] },
+                        { r: 1, c: 4, color: 'red', shape: 'triangle', walls: ['S', 'W'] },
+                        { r: 6, c: 5, color: 'green', shape: 'square', walls: ['N', 'E'] }
+                    ],
+                    edges: [
+                        { r: 0, c: 4, wall: 'E' },
+                        { r: 3, c: 0, wall: 'S' }
+                    ]
+                },
+                {
+                    id: 'B2',
+                    targets: [
+                        { r: 5, c: 2, color: 'red', shape: 'circle', walls: ['N', 'E'] },
+                        { r: 4, c: 2, color: 'blue', shape: 'square', walls: ['N', 'E'] },
+                        { r: 2, c: 2, color: 'yellow', shape: 'star', walls: ['S', 'E'] },
+                        { r: 6, c: 5, color: 'green', shape: 'triangle', walls: ['S', 'W'] }
+                    ],
+                    edges: [
+                        { r: 0, c: 2, wall: 'E' },
+                        { r: 5, c: 0, wall: 'S' }
+                    ]
+                },
+                {
+                    id: 'B3',
+                    targets: [
+                        { r: 6, c: 3, color: 'blue', shape: 'triangle', walls: ['N', 'E'] },
+                        { r: 4, c: 1, color: 'green', shape: 'star', walls: ['N', 'W'] },
+                        { r: 5, c: 4, color: 'yellow', shape: 'square', walls: ['S', 'W'] },
+                        { r: 6, c: 1, color: 'red', shape: 'star', walls: ['N', 'W'] }
+                    ],
+                    edges: [
+                        { r: 0, c: 3, wall: 'E' },
+                        { r: 4, c: 0, wall: 'S' }
+                    ]
+                },
+                {
+                    id: 'B4',
+                    targets: [
+                        { r: 3, c: 2, color: 'green', shape: 'circle', walls: ['N', 'W'] },
+                        { r: 3, c: 5, color: 'yellow', shape: 'triangle', walls: ['N', 'W'] },
+                        { r: 4, c: 6, color: 'red', shape: 'square', walls: ['S', 'W'] },
+                        { r: 1, c: 5, color: 'blue', shape: 'circle', walls: ['S', 'E'] },
+                        { r: 4, c: 4, color: 'vortex', shape: 'vortex', walls: ['S', 'W'] }
+                    ],
+                    edges: [
+                        { r: 0, c: 5, wall: 'E' },
+                        { r: 2, c: 0, wall: 'S' }
+                    ]
+                }
+            ]
+        };
+
+        const ROBOT_DEFS = [
+            { id: 'red', name: '赤紅機甲 (Vanguard)', color: '#ff1e56', icon: '🔴', symbol: 'R' },
+            { id: 'green', name: '翠綠守護 (Aegis)', color: '#00ff88', icon: '🟢', symbol: 'G' },
+            { id: 'blue', name: '蔚藍幻影 (Phantom)', color: '#00f2fe', icon: '🔵', symbol: 'B' },
+            { id: 'yellow', name: '耀金衝鋒 (Striker)', color: '#ffb703', icon: '🟡', symbol: 'Y' },
+            { id: 'silver', name: '白銀泰坦 (Titan)', color: '#e2e8f0', icon: '⚪', symbol: 'S' }
+        ];
+
+        const SHAPES = {
+            star: { icon: '★', name: '星形' },
+            circle: { icon: '●', name: '行星' },
+            triangle: { icon: '▲', name: '月亮' },
+            square: { icon: '◼', name: '齒輪' },
+            vortex: { icon: '🌀', name: '黑洞' }
+        };
+
+        function rotateCoord(r, c, rot) {
+            if (rot === 0) return { r: r, c: c };
+            if (rot === 1) return { r: c, c: 7 - r };
+            if (rot === 2) return { r: 7 - r, c: 7 - c };
+            if (rot === 3) return { r: 7 - c, c: r };
+        }
+
+        function rotateWall(wall, rot) {
+            const order = ['N', 'E', 'S', 'W'];
+            let idx = order.indexOf(wall);
+            return order[(idx + rot) % 4];
+        }
+
+        /* Generate SVG Mech Avatar */
+        function getRobotSVG(color, symbol) {
+            return `
+            <svg viewBox="0 0 100 100" class="robot-svg-wrapper" style="color: ${color};">
+                <!-- Drop shadow base -->
+                <circle cx="50" cy="50" r="42" fill="rgba(0,0,0,0.6)" />
+                <!-- Armor outer ring -->
+                <circle cx="50" cy="50" r="38" fill="#111827" stroke="${color}" stroke-width="4" />
+                <!-- Inner tech details -->
+                <polygon points="50,16 80,32 80,68 50,84 20,68 20,32" fill="${color}" fill-opacity="0.25" stroke="${color}" stroke-width="2" />
+                <!-- Visor optic / Core -->
+                <circle cx="50" cy="50" r="22" fill="#000" stroke="${color}" stroke-width="3" />
+                <!-- Symbol -->
+                <text x="50" y="58" font-family="monospace" font-size="22" font-weight="900" fill="#fff" text-anchor="middle" filter="drop-shadow(0 0 3px ${color})">${symbol}</text>
+                <!-- Corner sensors -->
+                <circle cx="28" cy="28" r="3.5" fill="${color}" />
+                <circle cx="72" cy="28" r="3.5" fill="${color}" />
+            </svg>
+            <svg viewBox="0 0 120 120" class="robot-targeting-reticle">
+                <circle cx="60" cy="60" r="54" fill="none" stroke="${color}" stroke-width="1.5" stroke-dasharray="8 6" opacity="0.85" />
+                <line x1="60" y1="2" x2="60" y2="14" stroke="${color}" stroke-width="2.5" />
+                <line x1="60" y1="106" x2="60" y2="118" stroke="${color}" stroke-width="2.5" />
+                <line x1="2" y1="60" x2="14" y2="60" stroke="${color}" stroke-width="2.5" />
+                <line x1="106" y1="60" x2="118" y2="60" stroke="${color}" stroke-width="2.5" />
+            </svg>
+            `;
+        }
+
+        /* SVG Quantum Reactor for Center 2x2 */
+        function getReactorSVG() {
+            return `
+            <svg viewBox="0 0 200 200" class="reactor-core-svg">
+                <defs>
+                    <radialGradient id="reactorGlow" cx="50%" cy="50%" r="50%">
+                        <stop offset="0%" stop-color="#00f2fe" stop-opacity="0.9" />
+                        <stop offset="45%" stop-color="#3b82f6" stop-opacity="0.5" />
+                        <stop offset="100%" stop-color="#070b16" stop-opacity="0" />
+                    </radialGradient>
+                </defs>
+                <circle cx="100" cy="100" r="95" fill="#0b1329" stroke="#00f2fe" stroke-width="3" stroke-dasharray="12 8" />
+                <circle cx="100" cy="100" r="75" fill="none" stroke="#a855f7" stroke-width="2" stroke-dasharray="6 4" />
+                <circle cx="100" cy="100" r="55" fill="url(#reactorGlow)" />
+                <polygon points="100,60 135,120 65,120" fill="none" stroke="#ffb703" stroke-width="3" />
+                <text x="100" y="105" font-family="monospace" font-size="12" font-weight="900" fill="#fff" text-anchor="middle" letter-spacing="1">CORE</text>
+            </svg>
+            `;
+        }
+
+        /* ==========================================================================
+           FAST BFS SHORTEST PATH SOLVER (Typed Array Optimized)
+           ========================================================================== */
+        function solveRicochet(walls, robots, targetRobotIdx, targetPos, maxDepth = 11, maxTimeMs = 1500) {
+            const t0 = performance.now();
+            const robotCount = robots.length;
+            
+            if (targetRobotIdx >= 0) {
+                if (robots[targetRobotIdx] === targetPos) return { moves: 0, path: [], timeMs: 0 };
+            } else {
+                if (robots.includes(targetPos)) return { moves: 0, path: [], timeMs: 0 };
+            }
+
+            function pack(arr) {
+                if (robotCount === 4) {
+                    return ((arr[0] << 24) | (arr[1] << 16) | (arr[2] << 8) | arr[3]) >>> 0;
+                }
+                return `${arr[0]},${arr[1]},${arr[2]},${arr[3]},${arr[4]}`;
+            }
+
+            const startState = pack(robots);
+            const visited = new Set();
+            visited.add(startState);
+
+            const MAX_STATES = 700000;
+            const queueState = robotCount === 4 ? new Uint32Array(MAX_STATES) : [];
+            const queueParent = new Int32Array(MAX_STATES);
+            const queueMove = new Uint8Array(MAX_STATES);
+
+            if (robotCount === 4) queueState[0] = startState;
+            else queueState.push(robots.slice());
+            queueParent[0] = -1;
+
+            let head = 0;
+            let tail = 1;
+
+            const depthBreaks = [0];
+            let currentDepth = 0;
+
+            const dirs = [
+                { dr: -1, dc: 0, mask: 1 }, // 0: Up
+                { dr: 0, dc: 1, mask: 2 },  // 1: Right
+                { dr: 1, dc: 0, mask: 4 },  // 2: Down
+                { dr: 0, dc: -1, mask: 8 }  // 3: Left
+            ];
+
+            while (head < tail) {
+                if (performance.now() - t0 > maxTimeMs) {
+                    return { moves: -1, path: [], timeout: true, timeMs: Math.round(performance.now() - t0) };
+                }
+
+                if (head === depthBreaks[currentDepth]) {
+                    currentDepth++;
+                    depthBreaks.push(tail);
+                    if (currentDepth > maxDepth) break;
+                }
+
+                let currRobots;
+                if (robotCount === 4) {
+                    const st = queueState[head];
+                    currRobots = [
+                        (st >>> 24) & 0xff,
+                        (st >>> 16) & 0xff,
+                        (st >>> 8) & 0xff,
+                        st & 0xff
+                    ];
+                } else {
+                    currRobots = queueState[head];
+                }
+
+                for (let i = 0; i < robotCount; i++) {
+                    const origPos = currRobots[i];
+                    const origR = origPos >> 4;
+                    const origC = origPos & 15;
+
+                    for (let d = 0; d < 4; d++) {
+                        const dir = dirs[d];
+                        let r = origR;
+                        let c = origC;
+
+                        while (true) {
+                            const cIdx = r * 16 + c;
+                            if (walls[cIdx] & dir.mask) break;
+                            const nr = r + dir.dr;
+                            const nc = c + dir.dc;
+                            if (nr < 0 || nr >= 16 || nc < 0 || nc >= 16) break;
+                            if ((nr === 7 || nr === 8) && (nc === 7 || nc === 8)) break; // Center
+                            const nIdx = nr * 16 + nc;
+                            
+                            let blocked = false;
+                            for (let k = 0; k < robotCount; k++) {
+                                if (currRobots[k] === nIdx) { blocked = true; break; }
+                            }
+                            if (blocked) break;
+
+                            r = nr;
+                            c = nc;
+                        }
+
+                        const newPos = (r << 4) | c;
+                        if (newPos === origPos) continue;
+
+                        const isWin = (targetRobotIdx >= 0 && i === targetRobotIdx && newPos === targetPos) ||
+                                      (targetRobotIdx < 0 && newPos === targetPos);
+
+                        if (isWin) {
+                            const path = [{ robot: i, dir: d, from: origPos, to: newPos }];
+                            let p = head;
+                            while (p > 0) {
+                                const m = queueMove[p];
+                                path.unshift({ robot: m >> 2, dir: m & 3 });
+                                p = queueParent[p];
+                            }
+                            return {
+                                moves: path.length,
+                                path: path,
+                                timeMs: Math.round(performance.now() - t0),
+                                statesCount: tail
+                            };
+                        }
+
+                        currRobots[i] = newPos;
+                        const key = pack(currRobots);
+                        currRobots[i] = origPos;
+
+                        if (!visited.has(key)) {
+                            visited.add(key);
+                            if (tail < MAX_STATES) {
+                                if (robotCount === 4) {
+                                    currRobots[i] = newPos;
+                                    queueState[tail] = pack(currRobots);
+                                    currRobots[i] = origPos;
+                                } else {
+                                    const nextArr = currRobots.slice();
+                                    nextArr[i] = newPos;
+                                    queueState.push(nextArr);
+                                }
+                                queueParent[tail] = head;
+                                queueMove[tail] = (i << 2) | d;
+                                tail++;
+                            }
+                        }
+                    }
+                }
+                head++;
+            }
+
+            return {
+                moves: -1,
+                path: [],
+                timeMs: Math.round(performance.now() - t0),
+                statesCount: tail
+            };
+        }
+
+        /* ==========================================================================
+           P2P WEBRTC MULTIPLAYER MANAGER (PeerJS + BroadcastChannel Fallback)
+           ========================================================================== */
+        class MultiplayerManager {
+            constructor(game) {
+                this.game = game;
+                this.peer = null;
+                this.isHost = false;
+                this.roomCode = null;
+                this.connections = []; // Host: array of client conns; Guest: [hostConn]
+                this.localPlayerName = '機甲駕駛員';
+                this.players = []; // [{ id, name, isHost, score }]
+                this.activeOperator = null;
+
+                // STUN servers configuration for NAT traversal
+                this.peerConfig = {
+                    config: {
+                        iceServers: [
+                            { urls: 'stun:stun.l.google.com:19302' },
+                            { urls: 'stun:stun1.l.google.com:19302' },
+                            { urls: 'stun:stun2.l.google.com:19302' }
+                        ]
+                    }
+                };
+
+                // Local BroadcastChannel fallback (offline multi-tab support on same PC)
+                this.localChannel = null;
+                if (typeof BroadcastChannel !== 'undefined') {
+                    this.localChannel = new BroadcastChannel('ricochet_local_net');
+                    this.localChannel.onmessage = (e) => this.handleMessage(e.data);
+                }
+            }
+
+            destroyPeer() {
+                if (this.peer) {
+                    try { this.peer.destroy(); } catch(e) {}
+                    this.peer = null;
+                }
+            }
+
+            createRoom(playerName) {
+                this.localPlayerName = playerName || '機甲隊長';
+                this.isHost = true;
+                this.connections = [];
+                this.destroyPeer();
+
+                // Generate clean 5-digit Room Code (10000 - 99999)
+                this.roomCode = String(Math.floor(10000 + Math.random() * 90000));
+                const targetPeerId = 'ricochet-room-' + this.roomCode;
+
+                this.players = [{
+                    id: 'host',
+                    name: this.localPlayerName,
+                    isHost: true,
+                    score: 0
+                }];
+
+                const statusEl = document.getElementById('lobbyStatusText');
+                if (statusEl) statusEl.textContent = '🟡 正在註冊專屬房號中繼節點...';
+
+                if (typeof Peer === 'undefined') {
+                    if (statusEl) statusEl.textContent = '🟢 本機多視窗模式已啟動（若需跨裝置線上對戰請確保連上網路）。';
+                    this.onLobbyUpdated();
+                    return;
+                }
+
+                try {
+                    this.peer = new Peer(targetPeerId, this.peerConfig);
+                    
+                    this.peer.on('open', (id) => {
+                        console.log('Host Peer opened with ID:', id);
+                        if (statusEl) statusEl.textContent = '🟢 房間就緒！請將房號分享給好友加入。';
+                        this.onLobbyUpdated();
+                    });
+
+                    this.peer.on('connection', (conn) => {
+                        this.setupHostConnection(conn);
+                    });
+
+                    this.peer.on('error', (err) => {
+                        console.warn('Host Peer error:', err);
+                        if (err.type === 'unavailable-id') {
+                            // Retry with new code
+                            this.createRoom(this.localPlayerName);
+                        } else {
+                            if (statusEl) statusEl.textContent = '⚠️ 網路連線提示：' + err.type;
+                        }
+                    });
+                } catch(e) {
+                    console.error('Peer creation failed:', e);
+                }
+
+                this.onLobbyUpdated();
+            }
+
+            setupHostConnection(conn) {
+                conn.on('open', () => {
+                    this.connections.push(conn);
+                    conn.on('data', (data) => this.handleMessage(data, conn));
+                    conn.on('close', () => {
+                        this.connections = this.connections.filter(c => c !== conn);
+                        this.players = this.players.filter(p => p.id !== conn.peer);
+                        this.broadcastLobby();
+                    });
+                });
+            }
+
+            joinRoom(roomCode, playerName) {
+                this.localPlayerName = playerName || '特務駕駛員';
+                this.isHost = false;
+                this.roomCode = String(roomCode).trim();
+                this.destroyPeer();
+
+                const targetPeerId = 'ricochet-room-' + this.roomCode;
+                const statusEl = document.getElementById('lobbyStatusText');
+                if (statusEl) statusEl.textContent = `🟡 正在連線至房號 [${this.roomCode}]...`;
+
+                if (typeof Peer === 'undefined') {
+                    // Local fallback
+                    this.sendMsg({
+                        type: 'JOIN_REQ',
+                        roomCode: this.roomCode,
+                        name: this.localPlayerName
+                    });
+                    if (statusEl) statusEl.textContent = '🟢 已發送本機加入請求！';
+                    return;
+                }
+
+                try {
+                    // Client creates random peer ID
+                    this.peer = new Peer(null, this.peerConfig);
+
+                    this.peer.on('open', () => {
+                        const conn = this.peer.connect(targetPeerId, { reliable: true });
+                        
+                        // Timeout check
+                        const timeoutId = setTimeout(() => {
+                            if (this.connections.length === 0) {
+                                if (statusEl) statusEl.textContent = '⚠️ 連線逾時：請確認房號正確，且房主已開好房間等待中。';
+                            }
+                        }, 8000);
+
+                        conn.on('open', () => {
+                            clearTimeout(timeoutId);
+                            this.connections = [conn];
+                            conn.send({
+                                type: 'JOIN_REQ',
+                                name: this.localPlayerName
+                            });
+                            if (statusEl) statusEl.textContent = '🟢 連線成功！已進入對戰大廳。';
+                            soundFX.playSelect();
+                        });
+
+                        conn.on('data', (data) => this.handleMessage(data));
+
+                        conn.on('error', (err) => {
+                            console.error('Conn error:', err);
+                            if (statusEl) statusEl.textContent = '⚠️ 連線錯誤：' + err;
+                        });
+                    });
+
+                    this.peer.on('error', (err) => {
+                        console.warn('Guest Peer error:', err);
+                        if (statusEl) statusEl.textContent = '⚠️ 節點錯誤：' + err.type;
+                    });
+                } catch(e) {
+                    console.error('Guest Peer failed:', e);
+                }
+
+                // Also broadcast locally
+                this.sendMsg({
+                    type: 'JOIN_REQ',
+                    roomCode: this.roomCode,
+                    name: this.localPlayerName
+                });
+            }
+
+            broadcast(msg) {
+                this.connections.forEach(conn => {
+                    if (conn.open) conn.send(msg);
+                });
+                if (this.localChannel) {
+                    this.localChannel.postMessage({ ...msg, roomCode: this.roomCode });
+                }
+            }
+
+            sendMsg(msg) {
+                if (this.isHost) {
+                    this.broadcast(msg);
+                } else if (this.connections.length > 0 && this.connections[0].open) {
+                    this.connections[0].send(msg);
+                } else if (this.localChannel) {
+                    this.localChannel.postMessage({ ...msg, roomCode: this.roomCode });
+                }
+            }
+
+            handleMessage(data, fromConn) {
+                if (!data || (data.roomCode && data.roomCode !== this.roomCode)) return;
+
+                switch (data.type) {
+                    case 'JOIN_REQ':
+                        if (this.isHost) {
+                            const newPlayer = {
+                                id: fromConn ? fromConn.peer : 'p_' + Math.random().toString(36).substr(2, 4),
+                                name: data.name,
+                                isHost: false,
+                                score: 0
+                            };
+                            // Avoid duplicate name
+                            if (!this.players.find(p => p.name === data.name)) {
+                                this.players.push(newPlayer);
+                            }
+                            soundFX.playSelect();
+                            this.broadcastLobby();
+                            this.syncBoardToPlayer(fromConn);
+                        }
+                        break;
+
+                    case 'LOBBY_UPDATE':
+                        this.players = data.players;
+                        this.onLobbyUpdated();
+                        break;
+
+                    case 'START_GAME_SIGNAL':
+                        document.getElementById('multiplayerModal').classList.remove('active');
+                        soundFX.playWin();
+                        break;
+
+                    case 'SYNC_BOARD':
+                        this.game.loadSyncedBoard(data.boardState);
+                        break;
+
+                    case 'START_TIMER':
+                        this.game.startOnlineTimer(data.starterName, data.bidMoves);
+                        break;
+
+                    case 'NEW_BID':
+                        this.game.addBid(data.name, data.moves);
+                        break;
+
+                    case 'START_VERIFY':
+                        this.activeOperator = data.operatorName;
+                        this.game.startOnlineVerification(data.operatorName, data.bidMoves);
+                        break;
+
+                    case 'REMOTE_MOVE':
+                        this.game.applyRemoteMove(data.robotIdx, data.dir);
+                        break;
+
+                    case 'NEXT_TARGET':
+                        this.game.currentTarget = data.target;
+                        this.game.nextTarget(false);
+                        break;
+
+                    case 'CHAT':
+                        this.addChatMessage(data.sender, data.text);
+                        break;
+
+                    case 'EMOTE':
+                        this.game.triggerFloatingEmote(data.emote);
+                        soundFX.playEmote();
+                        break;
+                }
+            }
+
+            broadcastLobby() {
+                this.broadcast({
+                    type: 'LOBBY_UPDATE',
+                    players: this.players
+                });
+                this.onLobbyUpdated();
+            }
+
+            syncBoardToPlayer(conn) {
+                const boardState = this.game.exportBoardState();
+                const payload = {
+                    type: 'SYNC_BOARD',
+                    boardState: boardState
+                };
+                if (conn && conn.open) conn.send(payload);
+                else this.broadcast(payload);
+            }
+
+            onLobbyUpdated() {
+                const list = document.getElementById('lobbyPlayerList');
+                if (list) {
+                    list.innerHTML = '';
+                    this.players.forEach(p => {
+                        const item = document.createElement('div');
+                        item.style.cssText = 'display:flex; justify-content:space-between; align-items:center; background:var(--bg-secondary); padding:8px 12px; border-radius:6px; font-size:12px; border-left:3px solid var(--accent-cyan);';
+                        item.innerHTML = `
+                            <span>${p.isHost ? '👑 ' : '🤖 '}<strong>${p.name}</strong> ${p.name === this.localPlayerName ? '(您)' : ''}</span>
+                            <span style="color:var(--accent-amber); font-weight:bold;">已得晶片: ${p.score || 0}</span>
+                        `;
+                        list.appendChild(item);
+                    });
+                }
+                const countEl = document.getElementById('playerCount');
+                if (countEl) countEl.textContent = this.players.length;
+
+                const indicator = document.getElementById('mpIndicator');
+                const statusText = document.getElementById('mpStatusText');
+                if (indicator && this.roomCode) {
+                    indicator.style.display = 'flex';
+                    statusText.textContent = `對戰室：${this.roomCode} (${this.players.length}人)`;
+                }
+
+                const chatPanel = document.getElementById('chatPanel');
+                if (chatPanel) chatPanel.style.display = 'block';
+
+                const startBtn = document.getElementById('btnStartMultiplayerGame');
+                if (startBtn) {
+                    startBtn.style.display = this.isHost ? 'inline-flex' : 'none';
+                }
+            }
+
+            addChatMessage(sender, text) {
+                const container = document.getElementById('chatMessages');
+                if (!container) return;
+                const msg = document.createElement('div');
+                msg.className = 'chat-msg';
+                msg.innerHTML = `<strong>${sender}:</strong> ${text}`;
+                container.appendChild(msg);
+                container.scrollTop = container.scrollHeight;
+            }
+        }
+
+        /* ==========================================================================
+           GAME ENGINE & STATE MANAGEMENT
+           ========================================================================== */
+        class RicochetGame {
+            constructor() {
+                this.walls = new Uint8Array(256);
+                this.targets = [];
+                this.robots = [];
+                this.initialRobotPositions = [];
+                this.activeRobot = 0;
+                this.currentTarget = null;
+                this.targetDeck = [];
+                this.completedTargets = [];
+                this.history = [];
+                this.optimalSolution = null;
+                this.optimalPar = null;
+                
+                // Settings
+                this.useSilver = false;
+                this.showGhosts = true;
+                this.fastAnim = true;
+
+                // Timer
+                this.timerSeconds = 60;
+                this.timerInterval = null;
+                this.bids = [];
+
+                // Multiplayer
+                this.mp = new MultiplayerManager(this);
+                this.onlineControlLocked = false;
+
+                this.domBoard = document.getElementById('boardGrid');
+                this.domRobots = document.getElementById('robotsLayer');
+            }
+
+            init() {
+                this.generateNewBoard();
+                this.bindEvents();
+                this.renderRobotPills();
+                this.updateUI();
+
+                // Check URL parameter for auto-join room (?room=CODE)
+                const urlParams = new URLSearchParams(window.location.search);
+                const roomParam = urlParams.get('room');
+                if (roomParam) {
+                    document.getElementById('inputRoomCode').value = roomParam;
+                    document.getElementById('multiplayerModal').classList.add('active');
+                }
+            }
+
+            generateNewBoard() {
+                this.walls = new Uint8Array(256);
+                this.targets = [];
+                this.completedTargets = [];
+
+                // 1. Board perimeter walls
+                for (let c = 0; c < 16; c++) {
+                    this.walls[c] |= 1;
+                    this.walls[15 * 16 + c] |= 4;
+                }
+                for (let r = 0; r < 16; r++) {
+                    this.walls[r * 16] |= 8;
+                    this.walls[r * 16 + 15] |= 2;
+                }
+
+                // 2. Center 2x2 barrier walls (7,7)-(8,8)
+                const addWall = (r, c, dir) => {
+                    if (dir === 'N') { this.walls[r*16+c] |= 1; if(r>0) this.walls[(r-1)*16+c] |= 4; }
+                    if (dir === 'E') { this.walls[r*16+c] |= 2; if(c<15) this.walls[r*16+c+1] |= 8; }
+                    if (dir === 'S') { this.walls[r*16+c] |= 4; if(r<15) this.walls[(r+1)*16+c] |= 1; }
+                    if (dir === 'W') { this.walls[r*16+c] |= 8; if(c>0) this.walls[r*16+c-1] |= 2; }
+                };
+
+                addWall(6, 7, 'S'); addWall(6, 8, 'S');
+                addWall(9, 7, 'N'); addWall(9, 8, 'N');
+                addWall(7, 6, 'E'); addWall(8, 6, 'E');
+                addWall(7, 9, 'W'); addWall(8, 9, 'W');
+
+                // 3. Assemble 4 quadrants
+                const quadIndices = [0, 1, 2, 3].sort(() => Math.random() - 0.5);
+                const offsets = [
+                    { r: 0, c: 0, rot: 0 },
+                    { r: 0, c: 8, rot: 1 },
+                    { r: 8, c: 8, rot: 2 },
+                    { r: 8, c: 0, rot: 3 }
+                ];
+
+                for (let i = 0; i < 4; i++) {
+                    const qIdx = quadIndices[i];
+                    const useSideB = Math.random() > 0.5;
+                    const quad = useSideB ? QUADRANTS.sideB[qIdx] : QUADRANTS.sideA[qIdx];
+                    const off = offsets[i];
+
+                    // Targets
+                    for (const t of quad.targets) {
+                        const rotC = rotateCoord(t.r, t.c, off.rot);
+                        const gr = off.r + rotC.r;
+                        const gc = off.c + rotC.c;
+                        for (const w of t.walls) {
+                            addWall(gr, gc, rotateWall(w, off.rot));
+                        }
+                        this.targets.push({
+                            r: gr,
+                            c: gc,
+                            pos: gr * 16 + gc,
+                            color: t.color,
+                            shape: t.shape
+                        });
+                    }
+
+                    // Outer Edge walls
+                    for (const e of quad.edges) {
+                        const rotC = rotateCoord(e.r, e.c, off.rot);
+                        const gr = off.r + rotC.r;
+                        const gc = off.c + rotC.c;
+                        addWall(gr, gc, rotateWall(e.wall, off.rot));
+                    }
+                }
+
+                // Shuffle target deck
+                this.targetDeck = this.targets.slice().sort(() => Math.random() - 0.5);
+
+                // 4. Render Board Grid FIRST so cells exist
+                this.renderGrid();
+
+                // 5. Place Robots randomly on non-center squares
+                this.placeRobots();
+
+                // 6. Start First Target
+                this.nextTarget(true);
+
+                // If in online multiplayer as host, sync to players
+                if (this.mp.isHost && this.mp.roomCode) {
+                    this.mp.syncBoardToPlayer();
+                }
+            }
+
+            placeRobots() {
+                const count = this.useSilver ? 5 : 4;
+                const placed = [];
+                const targetPositions = new Set(this.targets.map(t => t.pos));
+
+                while (placed.length < count) {
+                    const r = Math.floor(Math.random() * 16);
+                    const c = Math.floor(Math.random() * 16);
+                    if ((r === 7 || r === 8) && (c === 7 || c === 8)) continue;
+                    const pos = r * 16 + c;
+                    if (placed.includes(pos) || targetPositions.has(pos)) continue;
+                    placed.push(pos);
+                }
+                this.robots = placed;
+                this.initialRobotPositions = placed.slice();
+                this.renderRobots();
+            }
+
+            nextTarget(shouldBroadcast = true) {
+                if (this.targetDeck.length === 0) {
+                    this.targetDeck = this.targets.slice().sort(() => Math.random() - 0.5);
+                }
+                this.currentTarget = this.targetDeck.pop();
+                this.initialRobotPositions = this.robots.slice();
+                this.history = [];
+                this.optimalSolution = null;
+                this.optimalPar = null;
+                this.onlineControlLocked = false;
+                document.getElementById('solutionStepsContainer').style.display = 'none';
+
+                // Update active target beacon on the floor
+                document.querySelectorAll('.target-marker').forEach(el => el.classList.remove('active-target'));
+                const activeCell = document.getElementById(`cell-${this.currentTarget.r}-${this.currentTarget.c}`);
+                if (activeCell) {
+                    const marker = activeCell.querySelector('.target-marker');
+                    if (marker) marker.classList.add('active-target');
+                }
+
+                this.calculateParAsync();
+                this.updateUI();
+                this.renderRobots();
+
+                if (shouldBroadcast && this.mp.isHost && this.mp.roomCode) {
+                    this.mp.broadcast({
+                        type: 'NEXT_TARGET',
+                        target: this.currentTarget
+                    });
+                }
+            }
+
+            calculateParAsync() {
+                document.getElementById('parCountVal').textContent = '計算中...';
+                document.getElementById('solverStatusText').textContent = '🤖 AI 正在搜尋最佳解...';
+
+                setTimeout(() => {
+                    if (!this.currentTarget) return;
+                    let targetRobotIdx = -1;
+                    if (this.currentTarget.color === 'vortex') {
+                        targetRobotIdx = -1;
+                    } else {
+                        targetRobotIdx = ROBOT_DEFS.findIndex(d => d.id === this.currentTarget.color);
+                    }
+
+                    const res = solveRicochet(this.walls, this.robots, targetRobotIdx, this.currentTarget.pos, 10, 1500);
+                    if (res.moves >= 0) {
+                        this.optimalPar = res.moves;
+                        this.optimalSolution = res;
+                        document.getElementById('parCountVal').textContent = `${res.moves} 步`;
+                        document.getElementById('solverStatusText').innerHTML = 
+                            `✅ 已尋獲最佳解：<strong>${res.moves} 步</strong> (耗時 ${res.timeMs}ms)`;
+                    } else if (res.timeout) {
+                        document.getElementById('parCountVal').textContent = '10+ 步';
+                        document.getElementById('solverStatusText').textContent = '🧠 此題目難度極高（需超過 10 步才能解開！）';
+                    } else {
+                        document.getElementById('parCountVal').textContent = '高難度';
+                        document.getElementById('solverStatusText').textContent = '💡 嘗試多利用其他顏色機器人製造轉折點！';
+                    }
+                }, 40);
+            }
+
+            renderGrid() {
+                this.domBoard.innerHTML = '';
+                
+                for (let r = 0; r < 16; r++) {
+                    for (let c = 0; c < 16; c++) {
+                        const cell = document.createElement('div');
+                        cell.className = 'cell';
+                        cell.dataset.r = r;
+                        cell.dataset.c = c;
+                        cell.id = `cell-${r}-${c}`;
+                        const idx = r * 16 + c;
+
+                        // Center 2x2
+                        if ((r === 7 || r === 8) && (c === 7 || c === 8)) {
+                            cell.classList.add('center-cell');
+                            if (r === 7 && c === 7) {
+                                const reactor = document.createElement('div');
+                                reactor.className = 'center-reactor';
+                                reactor.innerHTML = getReactorSVG();
+                                cell.appendChild(reactor);
+                            }
+                        }
+
+                        // Walls
+                        const w = this.walls[idx];
+                        if (w & 1) cell.classList.add('wall-n');
+                        if (w & 2) cell.classList.add('wall-e');
+                        if (w & 4) cell.classList.add('wall-s');
+                        if (w & 8) cell.classList.add('wall-w');
+
+                        // Target Markers
+                        const target = this.targets.find(t => t.pos === idx);
+                        if (target) {
+                            const marker = document.createElement('div');
+                            marker.className = 'target-marker';
+                            const colorDef = ROBOT_DEFS.find(d => d.id === target.color) || { color: '#00f2fe' };
+                            marker.style.color = target.color === 'vortex' ? '#ff1e56' : colorDef.color;
+                            marker.textContent = SHAPES[target.shape]?.icon || '★';
+
+                            if (this.currentTarget && this.currentTarget.pos === idx) {
+                                marker.classList.add('active-target');
+                            }
+                            cell.appendChild(marker);
+                        }
+
+                        this.domBoard.appendChild(cell);
+                    }
+                }
+            }
+
+            renderRobots() {
+                this.domRobots.innerHTML = '';
+
+                this.robots.forEach((pos, idx) => {
+                    const r = pos >> 4;
+                    const c = pos & 15;
+                    const def = ROBOT_DEFS[idx];
+
+                    const robot = document.createElement('div');
+                    robot.className = `robot ${idx === this.activeRobot ? 'selected' : ''}`;
+                    robot.id = `robot-${idx}`;
+                    robot.style.transform = `translate(${c * 100}%, ${r * 100}%)`;
+
+                    robot.innerHTML = getRobotSVG(def.color, def.symbol);
+
+                    robot.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        this.selectRobot(idx);
+                    });
+
+                    this.domRobots.appendChild(robot);
+                });
+
+                this.renderGhostMarkers();
+            }
+
+            renderGhostMarkers() {
+                document.querySelectorAll('.ghost-dest').forEach(el => el.remove());
+                if (!this.showGhosts || this.onlineControlLocked) return;
+
+                const currPos = this.robots[this.activeRobot];
+                const dirs = [
+                    { dir: 0, dr: -1, dc: 0 },
+                    { dir: 1, dir: 1, dr: 0, dc: 1 },
+                    { dir: 2, dir: 2, dr: 1, dc: 0 },
+                    { dir: 3, dir: 3, dr: 0, dc: -1 }
+                ];
+
+                dirs.forEach(d => {
+                    const dest = this.calculateSlide(this.activeRobot, d.dir);
+                    if (dest !== currPos) {
+                        const dr = dest >> 4;
+                        const dc = dest & 15;
+                        const cell = document.getElementById(`cell-${dr}-${dc}`);
+                        if (cell) {
+                            const ghost = document.createElement('div');
+                            ghost.className = 'ghost-dest';
+                            ghost.title = `滑行至 (${dr+1}, ${dc+1})`;
+                            ghost.addEventListener('click', (e) => {
+                                e.stopPropagation();
+                                this.moveActiveRobot(d.dir);
+                            });
+                            cell.appendChild(ghost);
+                        }
+                    }
+                });
+            }
+
+            selectRobot(idx) {
+                if (idx < 0 || idx >= this.robots.length) return;
+                this.activeRobot = idx;
+                soundFX.playSelect();
+                this.renderRobots();
+                this.renderRobotPills();
+            }
+
+            renderRobotPills() {
+                const container = document.getElementById('robotPills');
+                container.innerHTML = '';
+                const count = this.useSilver ? 5 : 4;
+
+                for (let i = 0; i < count; i++) {
+                    const def = ROBOT_DEFS[i];
+                    const pill = document.createElement('div');
+                    pill.className = `robot-pill ${i === this.activeRobot ? 'active' : ''}`;
+                    pill.style.color = def.color;
+                    pill.innerHTML = `<span>${def.icon}</span> <span>${def.symbol}</span>`;
+                    pill.addEventListener('click', () => this.selectRobot(i));
+                    container.appendChild(pill);
+                }
+            }
+
+            calculateSlide(robotIdx, dir) {
+                const pos = this.robots[robotIdx];
+                let r = pos >> 4;
+                let c = pos & 15;
+                const dirs = [
+                    { dr: -1, dc: 0, mask: 1 },
+                    { dr: 0, dc: 1, mask: 2 },
+                    { dr: 1, dc: 0, mask: 4 },
+                    { dr: 0, dc: -1, mask: 8 }
+                ];
+                const d = dirs[dir];
+
+                while (true) {
+                    const cIdx = r * 16 + c;
+                    if (this.walls[cIdx] & d.mask) break;
+                    const nr = r + d.dr;
+                    const nc = c + d.dc;
+                    if (nr < 0 || nr >= 16 || nc < 0 || nc >= 16) break;
+                    if ((nr === 7 || nr === 8) && (nc === 7 || nc === 8)) break;
+                    const nIdx = nr * 16 + nc;
+
+                    let blocked = false;
+                    for (let k = 0; k < this.robots.length; k++) {
+                        if (k !== robotIdx && this.robots[k] === nIdx) { blocked = true; break; }
+                    }
+                    if (blocked) break;
+
+                    r = nr;
+                    c = nc;
+                }
+
+                return (r << 4) | c;
+            }
+
+            moveActiveRobot(dir) {
+                if (this.onlineControlLocked) {
+                    alert('⚠️ 目前為競賽觀戰模式，非操作者無法移動機器人！');
+                    return false;
+                }
+
+                const fromPos = this.robots[this.activeRobot];
+                const toPos = this.calculateSlide(this.activeRobot, dir);
+
+                if (fromPos === toPos) return false;
+
+                this.history.push({
+                    robotIdx: this.activeRobot,
+                    from: fromPos,
+                    to: toPos,
+                    dir: dir
+                });
+
+                this.robots[this.activeRobot] = toPos;
+                soundFX.playMove();
+
+                const r = toPos >> 4;
+                const c = toPos & 15;
+                const robotEl = document.getElementById(`robot-${this.activeRobot}`);
+                if (robotEl) {
+                    robotEl.style.transition = this.fastAnim 
+                        ? 'transform 0.14s cubic-bezier(0.2, 0.8, 0.2, 1)' 
+                        : 'transform 0.24s cubic-bezier(0.2, 0.8, 0.2, 1)';
+                    robotEl.style.transform = `translate(${c * 100}%, ${r * 100}%)`;
+                }
+
+                // If in multiplayer, broadcast move
+                if (this.mp.roomCode) {
+                    this.mp.sendMsg({
+                        type: 'REMOTE_MOVE',
+                        robotIdx: this.activeRobot,
+                        dir: dir
+                    });
+                }
+
+                this.updateUI();
+                this.renderGhostMarkers();
+                this.checkWinCondition();
+                return true;
+            }
+
+            applyRemoteMove(robotIdx, dir) {
+                this.activeRobot = robotIdx;
+                this.selectRobot(robotIdx);
+                const fromPos = this.robots[robotIdx];
+                const toPos = this.calculateSlide(robotIdx, dir);
+
+                this.history.push({
+                    robotIdx: robotIdx,
+                    from: fromPos,
+                    to: toPos,
+                    dir: dir
+                });
+
+                this.robots[robotIdx] = toPos;
+                soundFX.playMove();
+
+                const r = toPos >> 4;
+                const c = toPos & 15;
+                const robotEl = document.getElementById(`robot-${robotIdx}`);
+                if (robotEl) {
+                    robotEl.style.transform = `translate(${c * 100}%, ${r * 100}%)`;
+                }
+
+                this.updateUI();
+                this.checkWinCondition();
+            }
+
+            undo() {
+                if (this.history.length === 0 || this.onlineControlLocked) return;
+                const lastMove = this.history.pop();
+                this.robots[lastMove.robotIdx] = lastMove.from;
+                this.activeRobot = lastMove.robotIdx;
+                soundFX.playSelect();
+                this.renderRobots();
+                this.renderRobotPills();
+                this.updateUI();
+            }
+
+            resetRound() {
+                if (this.onlineControlLocked) return;
+                this.robots = this.initialRobotPositions.slice();
+                this.history = [];
+                soundFX.playSelect();
+                this.renderRobots();
+                this.updateUI();
+            }
+
+            checkWinCondition() {
+                if (!this.currentTarget) return;
+                const targetPos = this.currentTarget.pos;
+                let win = false;
+
+                if (this.currentTarget.color === 'vortex') {
+                    if (this.robots.includes(targetPos)) win = true;
+                } else {
+                    const targetRobotIdx = ROBOT_DEFS.findIndex(d => d.id === this.currentTarget.color);
+                    if (this.robots[targetRobotIdx] === targetPos) win = true;
+                }
+
+                if (win) {
+                    soundFX.playWin();
+                    this.completedTargets.push(this.currentTarget);
+                    
+                    document.getElementById('victoryPlayerMoves').textContent = this.history.length;
+                    document.getElementById('victoryParMoves').textContent = this.optimalPar || '-';
+                    document.getElementById('victoryModal').classList.add('active');
+                }
+            }
+
+            updateUI() {
+                if (this.currentTarget) {
+                    const badge = document.getElementById('targetBadge');
+                    const name = document.getElementById('targetName');
+                    const colorDef = ROBOT_DEFS.find(d => d.id === this.currentTarget.color) || { color: '#00f2fe' };
+                    badge.style.color = this.currentTarget.color === 'vortex' ? '#ff1e56' : colorDef.color;
+                    badge.textContent = SHAPES[this.currentTarget.shape]?.icon || '★';
+                    name.textContent = `${colorDef.name.split(' ')[0]} ${SHAPES[this.currentTarget.shape]?.name}`;
+                }
+
+                document.getElementById('moveCountVal').textContent = this.history.length;
+                document.getElementById('scoreCountVal').textContent = `${this.completedTargets.length} / 17`;
+                document.getElementById('historyCount').textContent = `${this.history.length} 步`;
+
+                const historyList = document.getElementById('historyList');
+                if (this.history.length === 0) {
+                    historyList.innerHTML = '<div style="color: var(--text-muted); text-align: center; padding: 16px 0; font-size: 12px;">尚未進行移動，請點選機器人開始滑行！</div>';
+                } else {
+                    historyList.innerHTML = '';
+                    const dirNames = ['向上 ▲', '向右 ▶', '向下 ▼', '向左 ◀'];
+                    this.history.forEach((m, idx) => {
+                        const def = ROBOT_DEFS[m.robotIdx];
+                        const item = document.createElement('div');
+                        item.className = 'history-item';
+                        item.style.color = def.color;
+                        item.innerHTML = `
+                            <span><strong>${idx + 1}.</strong> ${def.icon} ${def.name.split(' ')[0]} ${dirNames[m.dir]}</span>
+                            <span style="font-size: 11px; opacity: 0.8;">(${m.from >> 4},${m.from & 15}) → (${m.to >> 4},${m.to & 15})</span>
+                        `;
+                        historyList.appendChild(item);
+                    });
+                    historyList.scrollTop = historyList.scrollHeight;
+                }
+
+                document.getElementById('btnUndo').disabled = this.history.length === 0 || this.onlineControlLocked;
+                document.getElementById('btnReset').disabled = this.history.length === 0 || this.onlineControlLocked;
+            }
+
+            showHint() {
+                if (!this.optimalSolution || this.optimalSolution.moves <= 0) {
+                    this.calculateParAsync();
+                    setTimeout(() => this.showHint(), 500);
+                    return;
+                }
+                const firstMove = this.optimalSolution.path[0];
+                const def = ROBOT_DEFS[firstMove.robot];
+                const dirNames = ['向上 ▲', '向右 ▶', '向下 ▼', '向左 ◀'];
+                this.selectRobot(firstMove.robot);
+                
+                alert(`💡 智慧提示：\n建議第一步移動【${def.name}】${dirNames[firstMove.dir]}！\n最佳理論總步數為 ${this.optimalSolution.moves} 步。`);
+            }
+
+            showSolutionSteps() {
+                if (!this.optimalSolution || this.optimalSolution.moves <= 0) {
+                    this.calculateParAsync();
+                    setTimeout(() => this.showSolutionSteps(), 500);
+                    return;
+                }
+                const container = document.getElementById('solutionStepsContainer');
+                const list = document.getElementById('solutionStepsList');
+                container.style.display = 'flex';
+                list.innerHTML = '';
+
+                const dirNames = ['向上 ▲', '向右 ▶', '向下 ▼', '向左 ◀'];
+                this.optimalSolution.path.forEach((step, idx) => {
+                    const def = ROBOT_DEFS[step.robot];
+                    const item = document.createElement('div');
+                    item.className = 'solution-step-item';
+                    item.style.color = def.color;
+                    item.innerHTML = `
+                        <span style="font-weight: bold;">${idx + 1}. ${def.icon} ${def.name.split(' ')[0]}</span>
+                        <span style="color: #fff;">${dirNames[step.dir]}</span>
+                    `;
+                    list.appendChild(item);
+                });
+            }
+
+            autoPlaySolution() {
+                if (!this.optimalSolution || !this.optimalSolution.path.length) return;
+                this.resetRound();
+                let stepIdx = 0;
+                const path = this.optimalSolution.path;
+
+                const interval = setInterval(() => {
+                    if (stepIdx >= path.length) {
+                        clearInterval(interval);
+                        return;
+                    }
+                    const step = path[stepIdx];
+                    this.selectRobot(step.robot);
+                    this.moveActiveRobot(step.dir);
+                    stepIdx++;
+                }, 380);
+            }
+
+            // Sand Timer Logic
+            toggleTimer() {
+                if (this.timerInterval) {
+                    clearInterval(this.timerInterval);
+                    this.timerInterval = null;
+                    document.getElementById('btnToggleTimer').textContent = '▶ 翻轉沙漏';
+                    document.getElementById('timerVal').classList.remove('running');
+                    document.getElementById('timerStatus').textContent = '暫停';
+                } else {
+                    this.timerSeconds = 60;
+                    document.getElementById('btnToggleTimer').textContent = '⏹ 停止計時';
+                    document.getElementById('timerVal').classList.add('running');
+                    document.getElementById('timerStatus').textContent = '計時中...';
+                    soundFX.playSelect();
+
+                    if (this.mp.roomCode) {
+                        this.mp.sendMsg({
+                            type: 'START_TIMER',
+                            starterName: this.mp.localPlayerName,
+                            bidMoves: document.getElementById('bidMoves').value || 10
+                        });
+                    }
+
+                    this.timerInterval = setInterval(() => {
+                        this.timerSeconds--;
+                        const mins = Math.floor(this.timerSeconds / 60);
+                        const secs = this.timerSeconds % 60;
+                        document.getElementById('timerVal').textContent = 
+                            `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+                        
+                        if (this.timerSeconds <= 5 && this.timerSeconds > 0) {
+                            soundFX.playTick();
+                        }
+
+                        if (this.timerSeconds <= 0) {
+                            clearInterval(this.timerInterval);
+                            this.timerInterval = null;
+                            document.getElementById('btnToggleTimer').textContent = '▶ 重新翻轉';
+                            document.getElementById('timerVal').classList.remove('running');
+                            document.getElementById('timerStatus').textContent = '⏰ 時間到！';
+                            soundFX.playAlarm();
+                            this.evaluateBids();
+                        }
+                    }, 1000);
+                }
+            }
+
+            startOnlineTimer(starterName, bidMoves) {
+                if (this.timerInterval) clearInterval(this.timerInterval);
+                this.timerSeconds = 60;
+                document.getElementById('timerVal').classList.add('running');
+                document.getElementById('timerStatus').textContent = `${starterName} 啟動沙漏！`;
+                soundFX.playSelect();
+
+                if (starterName && bidMoves) {
+                    this.addBid(starterName, bidMoves);
+                }
+
+                this.timerInterval = setInterval(() => {
+                    this.timerSeconds--;
+                    const mins = Math.floor(this.timerSeconds / 60);
+                    const secs = this.timerSeconds % 60;
+                    document.getElementById('timerVal').textContent = 
+                        `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+                    if (this.timerSeconds <= 5 && this.timerSeconds > 0) soundFX.playTick();
+                    if (this.timerSeconds <= 0) {
+                        clearInterval(this.timerInterval);
+                        this.timerInterval = null;
+                        document.getElementById('timerVal').classList.remove('running');
+                        soundFX.playAlarm();
+                        this.evaluateBids();
+                    }
+                }, 1000);
+            }
+
+            addBid(name, moves) {
+                if (!name || moves <= 0) return;
+                this.bids.push({ name, moves: parseInt(moves, 10) });
+                this.bids.sort((a, b) => a.moves - b.moves);
+                this.renderBids();
+
+                if (this.mp.roomCode) {
+                    this.mp.sendMsg({
+                        type: 'NEW_BID',
+                        name: name,
+                        moves: parseInt(moves, 10)
+                    });
+                }
+            }
+
+            renderBids() {
+                const list = document.getElementById('bidList');
+                list.innerHTML = '';
+                this.bids.forEach((b, idx) => {
+                    const item = document.createElement('div');
+                    item.className = `bid-item ${idx === 0 ? 'winner' : ''}`;
+                    item.innerHTML = `
+                        <span>${idx === 0 ? '👑 ' : ''}${b.name}</span>
+                        <span><strong>${b.moves}</strong> 步</span>
+                    `;
+                    list.appendChild(item);
+                });
+            }
+
+            evaluateBids() {
+                if (this.bids.length > 0) {
+                    const winner = this.bids[0];
+                    alert(`⏰ 時間到！\n喊出最低步數的是【${winner.name}】(${winner.moves} 步)！\n請由 ${winner.name} 在棋盤上操作驗證！`);
+                    
+                    if (this.mp.roomCode) {
+                        if (winner.name === this.mp.localPlayerName) {
+                            this.onlineControlLocked = false;
+                        } else {
+                            this.onlineControlLocked = true;
+                        }
+                    }
+                } else {
+                    alert('⏰ 60秒時間到！無人喊步數，可繼續自由尋找解法。');
+                }
+            }
+
+            startOnlineVerification(operatorName, bidMoves) {
+                this.resetRound();
+                this.onlineControlLocked = (operatorName !== this.mp.localPlayerName);
+                alert(`🚀 由【${operatorName}】進行 ${bidMoves} 步驗證，其他玩家即時觀戰！`);
+            }
+
+            triggerFloatingEmote(emote) {
+                const layer = document.getElementById('emotesLayer');
+                if (!layer) return;
+                const bubble = document.createElement('div');
+                bubble.className = 'emote-bubble';
+                bubble.textContent = emote;
+                bubble.style.left = (20 + Math.random() * 60) + '%';
+                bubble.style.top = (40 + Math.random() * 30) + '%';
+                layer.appendChild(bubble);
+                setTimeout(() => bubble.remove(), 2500);
+            }
+
+            exportBoardState() {
+                return {
+                    walls: Array.from(this.walls),
+                    targets: this.targets,
+                    robots: this.robots,
+                    currentTarget: this.currentTarget
+                };
+            }
+
+            loadSyncedBoard(st) {
+                this.walls = new Uint8Array(st.walls);
+                this.targets = st.targets;
+                this.robots = st.robots;
+                this.initialRobotPositions = st.robots.slice();
+                this.currentTarget = st.currentTarget;
+                this.renderGrid();
+                this.renderRobots();
+                this.updateUI();
+                this.calculateParAsync();
+            }
+
+            bindEvents() {
+                // Direction buttons
+                document.getElementById('dpadUp').addEventListener('click', () => this.moveActiveRobot(0));
+                document.getElementById('dpadRight').addEventListener('click', () => this.moveActiveRobot(1));
+                document.getElementById('dpadDown').addEventListener('click', () => this.moveActiveRobot(2));
+                document.getElementById('dpadLeft').addEventListener('click', () => this.moveActiveRobot(3));
+
+                // Quick buttons
+                document.getElementById('btnUndo').addEventListener('click', () => this.undo());
+                document.getElementById('btnReset').addEventListener('click', () => this.resetRound());
+                document.getElementById('btnNextTarget').addEventListener('click', () => this.nextTarget(true));
+                document.getElementById('btnNewGame').addEventListener('click', () => {
+                    if (confirm('確定要隨機生成全新棋盤嗎？')) {
+                        this.generateNewBoard();
+                    }
+                });
+
+                document.getElementById('btnHint').addEventListener('click', () => this.showHint());
+                document.getElementById('btnSolve').addEventListener('click', () => this.showSolutionSteps());
+                document.getElementById('btnAutoPlay').addEventListener('click', () => this.autoPlaySolution());
+
+                // Timer & Bids
+                document.getElementById('btnToggleTimer').addEventListener('click', () => this.toggleTimer());
+                document.getElementById('btnAddBid').addEventListener('click', () => {
+                    const name = document.getElementById('bidderName').value.trim() || this.mp.localPlayerName;
+                    const moves = document.getElementById('bidMoves').value;
+                    if (moves) {
+                        this.addBid(name, moves);
+                        document.getElementById('bidMoves').value = '';
+                    }
+                });
+
+                // Settings toggles
+                document.getElementById('toggleSilverRobot').addEventListener('change', (e) => {
+                    this.useSilver = e.target.checked;
+                    this.placeRobots();
+                    this.renderRobotPills();
+                    this.calculateParAsync();
+                });
+
+                document.getElementById('toggleGhostMarkers').addEventListener('change', (e) => {
+                    this.showGhosts = e.target.checked;
+                    this.renderGhostMarkers();
+                });
+
+                document.getElementById('toggleFastAnim').addEventListener('change', (e) => {
+                    this.fastAnim = e.target.checked;
+                });
+
+                // Sound toggle
+                document.getElementById('btnSound').addEventListener('click', () => {
+                    soundFX.muted = !soundFX.muted;
+                    document.getElementById('btnSound').textContent = soundFX.muted ? '🔇' : '🔊';
+                });
+
+                // Rules modal
+                document.getElementById('btnRules').addEventListener('click', () => {
+                    document.getElementById('rulesModal').classList.add('active');
+                });
+                document.getElementById('btnCloseRules').addEventListener('click', () => {
+                    document.getElementById('rulesModal').classList.remove('active');
+                });
+
+                // Victory modal
+                document.getElementById('btnVictoryStay').addEventListener('click', () => {
+                    document.getElementById('victoryModal').classList.remove('active');
+                });
+                document.getElementById('btnVictoryNext').addEventListener('click', () => {
+                    document.getElementById('victoryModal').classList.remove('active');
+                    this.nextTarget(true);
+                });
+
+                // Multiplayer Modal & Actions
+                document.getElementById('btnOpenMultiplayer').addEventListener('click', () => {
+                    document.getElementById('multiplayerModal').classList.add('active');
+                });
+                document.getElementById('btnCloseMultiplayer').addEventListener('click', () => {
+                    document.getElementById('multiplayerModal').classList.remove('active');
+                });
+
+                document.getElementById('btnCreateRoom').addEventListener('click', () => {
+                    const name = document.getElementById('mpPlayerName').value.trim() || '隊長';
+                    this.mp.createRoom(name);
+                    document.getElementById('mpSetupSection').style.display = 'none';
+                    document.getElementById('mpActiveRoomSection').style.display = 'flex';
+                    document.getElementById('displayRoomCode').textContent = this.mp.roomCode;
+                });
+
+                document.getElementById('btnJoinRoom').addEventListener('click', () => {
+                    const code = document.getElementById('inputRoomCode').value.trim();
+                    const name = document.getElementById('mpPlayerName').value.trim() || '特務';
+                    if (!code) { alert('請輸入 5 碼房號！'); return; }
+                    this.mp.joinRoom(code, name);
+                    document.getElementById('mpSetupSection').style.display = 'none';
+                    document.getElementById('mpActiveRoomSection').style.display = 'flex';
+                    document.getElementById('displayRoomCode').textContent = code.toUpperCase();
+                });
+
+                document.getElementById('btnCopyInviteLink').addEventListener('click', () => {
+                    if (window.location.protocol === 'file:') {
+                        const info = `【碰撞機器人 對戰邀請】\n請開啟遊戲網頁，點擊「網路連線對戰」並輸入 5 碼房號：\n👉 房號：${this.mp.roomCode}`;
+                        navigator.clipboard.writeText(info).then(() => {
+                            alert(`已複製對戰邀請資訊！\n請將 5 碼房號分享給好友：【${this.mp.roomCode}】`);
+                        });
+                    } else {
+                        const link = `${window.location.origin}${window.location.pathname}?room=${this.mp.roomCode}`;
+                        navigator.clipboard.writeText(link).then(() => {
+                            alert(`已複製專屬邀請連結！好友點擊即可直接進入房間：\n${link}`);
+                        });
+                    }
+                });
+
+                document.getElementById('btnStartMultiplayerGame').addEventListener('click', () => {
+                    document.getElementById('multiplayerModal').classList.remove('active');
+                    this.mp.broadcast({ type: 'START_GAME_SIGNAL' });
+                    this.generateNewBoard();
+                });
+
+                document.getElementById('btnLeaveRoom').addEventListener('click', () => {
+                    window.location.href = window.location.pathname;
+                });
+
+                // Chat & Emotes
+                document.getElementById('btnSendChat').addEventListener('click', () => {
+                    const text = document.getElementById('chatInput').value.trim();
+                    if (text) {
+                        this.mp.sendMsg({
+                            type: 'CHAT',
+                            sender: this.mp.localPlayerName,
+                            text: text
+                        });
+                        this.mp.addChatMessage(this.mp.localPlayerName, text);
+                        document.getElementById('chatInput').value = '';
+                    }
+                });
+
+                document.getElementById('chatInput').addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') document.getElementById('btnSendChat').click();
+                });
+
+                document.querySelectorAll('.emote-btn').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        const em = btn.dataset.emote;
+                        this.triggerFloatingEmote(em);
+                        soundFX.playEmote();
+                        if (this.mp.roomCode) {
+                            this.mp.sendMsg({
+                                type: 'EMOTE',
+                                emote: em
+                            });
+                        }
+                    });
+                });
+
+                // Keyboard controls
+                window.addEventListener('keydown', (e) => {
+                    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key) && 
+                        document.activeElement.tagName !== 'INPUT') {
+                        e.preventDefault();
+                    }
+
+                    if (document.activeElement.tagName === 'INPUT') return;
+
+                    if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') this.moveActiveRobot(0);
+                    else if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') this.moveActiveRobot(1);
+                    else if (e.key === 'ArrowDown' || e.key === 's' || e.key === 'S') this.moveActiveRobot(2);
+                    else if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') this.moveActiveRobot(3);
+                    else if (e.key === 'z' || e.key === 'Z') this.undo();
+                    else if (e.key === 'r' && !e.ctrlKey && !e.metaKey) this.resetRound();
+                    else if (e.key === 'n' || e.key === 'N') this.nextTarget(true);
+                    else if (e.key === ' ' || e.key === 'Tab') {
+                        const total = this.useSilver ? 5 : 4;
+                        this.selectRobot((this.activeRobot + 1) % total);
+                    }
+                    else if (['1', '2', '3', '4', '5'].includes(e.key)) {
+                        const idx = parseInt(e.key, 10) - 1;
+                        const total = this.useSilver ? 5 : 4;
+                        if (idx < total) this.selectRobot(idx);
+                    }
+                });
+
+                // Touch & Mouse Drag / Swipe
+                let touchStartX = 0;
+                let touchStartY = 0;
+                this.domBoard.addEventListener('pointerdown', (e) => {
+                    touchStartX = e.clientX;
+                    touchStartY = e.clientY;
+                });
+                this.domBoard.addEventListener('pointerup', (e) => {
+                    const dx = e.clientX - touchStartX;
+                    const dy = e.clientY - touchStartY;
+                    if (Math.abs(dx) > 25 || Math.abs(dy) > 25) {
+                        if (Math.abs(dx) > Math.abs(dy)) {
+                            if (dx > 0) this.moveActiveRobot(1); // Right
+                            else this.moveActiveRobot(3); // Left
+                        } else {
+                            if (dy > 0) this.moveActiveRobot(2); // Down
+                            else this.moveActiveRobot(0); // Up
+                        }
+                    }
+                });
+            }
+        }
+
+        // Initialize game on DOM load
+        window.addEventListener('DOMContentLoaded', () => {
+            const game = new RicochetGame();
+            game.init();
+        });
+    </script>
+</body>
+</html>
